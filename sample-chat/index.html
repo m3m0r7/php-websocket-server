@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+        <script>
+
+            if (typeof WebSocket === 'undefined') {
+                var ws = new MozWebSocket("ws://localhost:8484/chat");
+            } else {
+                var ws = new WebSocket("ws://localhost:8484/chat");
+            }
+
+            $(function(){
+
+                var addr = null;
+
+                ws.onmessage = function (event) {
+
+                    if (addr === null) {
+
+                        addr = event.data;
+
+                        $('#addr').html(addr + "さん");
+
+                    } else {
+
+                        $('#chat').append('<p class="line ' + (event.data[0] === '>' ? 'mysay' : '') + '">' + event.data + '</p>');
+
+                        $('#chat').scrollTop(99999);
+
+                    }
+
+                }
+
+                ws.onopen = function (e) {
+
+                    $('#chat').append('<p class="line">チャットに参加しました。</p>').scrollTop(99999);
+
+                }
+
+                $('#send').click(function(){
+                    ws.send($('#message').val());
+                });
+
+                $('#close').click(function(){
+                    ws.close();
+                });
+
+            });
+        </script>
+        <style type="text/css">
+
+            #chat {
+
+                width : 500px ;
+                height : 200px ;
+                overflow : scroll ;
+                overflow-x : hidden ;
+
+            }
+
+            .line {
+
+                color : #666666 ;
+
+            }
+
+            .mysay {
+
+                font-weight : bolder ;
+
+            }
+
+        </style>
+    </head>
+    <body>
+        <h1>WebSocket チャットサンプル</h1>
+        <form action="javascript:void(0);" method="post">
+
+            <p id="addr">取得中...</p>
+
+            <p><input type="text" id="message" value="" /><input type="submit" id="send" value="送信" /><input type="submit" id="close" value="切断" /></p>
+
+            <div id="chat"></div>
+
+        </form>
+    </body>
+</html>

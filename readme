@@ -1,0 +1,474 @@
+Rx::WebSocketについて
+
+Copyright (C) 2012  メモリー
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+----------------------------------------
+
+■ 確認済み対応WebSocketバージョン
+
+    7, 8, 13
+
+■ 確認済みブラウザ
+
+    Firefox, GoogleChrome
+
+■ 確認済みの環境
+
+    PHP 5.3.8 (Windows 7, XAMPP)
+
+■ サンプルの利用方法
+
+    server.bat(sh)を起動後、
+
+    sample-time, sample-chatにブラウザからオンラインで接続してみてください。
+
+    ○ Q. 起動できない
+
+       A. 環境変数にphpがない可能性があります。phpのパスを通してください。環境変数の指定の仕方などは調べてください。
+
+■ メソッド解説
+
+    ○ WebSocket クラス
+
+        - triggerEvent ($eventName, $clientHandle)
+
+            $eventNameイベントを任意のタイミングで発動させます。
+
+            [引数]
+
+                $eventName    - イベント名を指定します。($eventNameについては後述)
+                $clientHandle - WebSocketClientインスタンスを指定します。nullを指定することも可能です。
+
+        - registerResource ($resource)
+
+            動作させるリソースを登録します。
+
+            [引数]
+
+                $resource - リソース名
+
+        - registerEvent ($eventName, $callback)
+
+            全リソースに対するトリガーイベントを登録します。
+
+            [引数]
+
+                $eventName - イベント名を指定します。(イベント名については後述)
+                $callback  - イベントが呼ばれた時のコールバック関数
+
+        - registerEvent ($eventName, $resource, $callback)
+
+            特定のリソースでアクセスしてきたクライアントにのみトリガーイベントが発動するように登録します。
+
+            [引数]
+
+                $eventName - イベント名を指定します。(イベント名については後述)
+                $resource - リソース名
+                $callback  - イベントが呼ばれた時のコールバック関数
+
+        - broadcastClose ()
+
+            全クライアントにWebSocket終了のメッセージを送信します。
+
+        - broadcastPing ($message = 'HELLO')
+
+            全クライアントにpingを送信します。
+
+            [引数]
+
+                $message - pingで送信する内容を指定します。基本はデフォルトで問題ありません。
+
+        - broadcastMessage ($message)
+
+            全クライアントにメッセージを送信します。
+
+            [引数]
+
+                $message - 送信メッセージの内容
+
+        - broadcastCommand ($message, $opcode = 0x01, $useMask = false)
+
+            全クライアントにメッセージを送信します。 (broadcastMessageと違い詳細設定が可能。)
+
+            [引数]
+
+                $message - 送信メッセージの内容
+                $opcode  - Opcode
+                $mask    - マスクを指定する場合はtrue, しない場合はfalse
+
+        - serverRun ($callback = null)
+
+            サーバーを起動させます。
+
+            [引数]
+
+                $callback - サーバー起動時に使用するコールバック関数。第一引数に自身のWebSocketクラスが参照渡しで入ります。
+
+
+    ○ WebSocketClient クラス
+
+        - $address
+
+            クライアントのIPアドレス
+
+        - $port
+
+            クライアントのポート
+
+        - $timestamp
+
+            接続してきた日時をUNIXタイムスタンプで格納します。
+
+        - $resource
+
+            接続してきたリソース名
+
+        - getMessage ()
+
+            クライアントから送信されたメッセージを取得します。
+            WebSocketから使用されるもので、一般的には使用されません。
+
+        - sendClose ()
+
+            クライアントとの切断を形式的に行います。
+
+        - sendPing ($ping = 'HELLO')
+
+            pingを送信します。
+
+            [引数]
+
+                $message - pingで送信する内容を指定します。基本はデフォルトで問題ありません。
+
+        - sendPong ($pong)
+
+            pongを送信します。
+            getMessage()から使用されるもので、一般的には使用されません。
+
+            [引数]
+
+                $ping - pongで送信する内容を指定します。
+
+        - sendMessage ($message)
+
+            メッセージを送信します。
+
+            [引数]
+
+                $message - 送信メッセージの内容
+
+        - sendBinaryMessage ($message)
+
+            バイナリメッセージを送信します。
+
+            [引数]
+
+                $message - 送信メッセージの内容
+
+        - sendCommand ($message, $opcode = 0x01, $useMask = false)
+
+            メッセージを送信します。 (sendMessageと違い詳細設定が可能。)
+
+            [引数]
+
+                $message - 送信メッセージの内容
+                $opcode  - Opcode
+                $mask    - マスクを指定する場合はtrue, しない場合はfalse
+
+        - read ($size = 0xffff)
+
+            バッファを読みこむためのものです。
+            getMessage()から使用されるもので、一般的には使用されません。
+
+            [引数]
+
+                $size = 読み込むサイズ
+
+        - write ($body)
+
+            バッファを書きこむためのものです。
+            getMessage()から使用されるもので、一般的には使用されません。
+
+            [引数]
+
+                $body - 書き込む内容
+
+■ broadcast系のメソッドについて
+
+    ○ 第一引数の$messageに関して
+
+        $messageには送信する内容を書くものですが、下記のような配列を指定することも可能です。
+
+        0 => WebSocketClientクラスで作られたインスタンス
+        1 => 添字0で指定した相手にこのメッセージを送信
+        2 => 添字0で指定した相手以外全員にこのメッセージを送信
+
+        例えば、
+
+            $message = array(
+                0 => $client
+                1 => 'Me'
+                2 => 'Anyone'
+            );
+
+        と指定した場合$clientが指すクライアントにはMeが送信され、それ以外のユーザーにはAnyoneが送信されます。
+
+■ イベント名について
+
+    ○ 登録されている使用可能なイベント
+
+        - connect
+
+            クライアントが接続時に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+
+        - disconnect
+
+            クライアントが切断時に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+
+
+        - send
+
+            データの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 送信した内容
+
+
+        - send-ping
+
+            pingの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $ping         - 送信したping
+
+
+        - send-pong
+
+            pongの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $pong         - 送信したpong
+
+
+        - send-header
+
+            メッセージヘッダーの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $header       - 送信したヘッダー
+
+
+        - send-body
+
+            メッセージボディの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $body         - 送信した本文
+
+
+        - send-close
+
+            クライアントに切断メッセージの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+
+
+        - send-message
+
+            メッセージの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 送信した内容
+
+
+        - send-message-plain
+
+            通常メッセージの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 送信した内容
+
+
+        - send-message-binary
+
+            バイナリメッセージの送信後に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 送信した内容
+
+
+        - received
+
+            データを受け取った際に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 受け取った内容
+
+
+        - received-ping
+
+            pingを受け取った際に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $ping         - 受け取ったping
+
+
+        - received-pong
+
+            pongを受け取った際に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $pong         - 受け取ったpong
+
+
+        - received-close
+
+            クライアントから切断メッセージを受け取った際に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+
+
+        - received-message
+
+            メッセージを受け取った際に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 受け取った内容のデコード結果
+
+
+        - received-message-plain
+
+            通常メッセージを受け取った際に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 受け取った内容のデコード結果
+
+
+        - received-message-binary
+
+            バイナリメッセージを受け取った際に発動するイベントです。
+
+            [コールバック関数が受け付ける引数]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+                $message      - 受け取った内容のデコード結果
+
+
+    ○ 発動の優先度
+
+
+                                                             リソース名あり
+                                                                   |
+                                                             received/send
+                                                                   |
+                                                             リソース名なし
+                                                                   |
+                                                             received/send
+
+
+                                                              [received]
+
+                                                               received
+                                                                   |
+                                +--------------------------------+-+----------------+------------------+
+                                |                                |                  |                  |
+                    +------received-message------+            received-close     received-ping      received-pong
+                    |                            |
+        received-message-plain       received-message-binary
+
+
+                                                                [send]
+
+                                                              send-header
+                                                                   |
+                                                               send-body
+                                                                   |
+                                                                 send
+                                                                   |
+                                +------------------------+---------+----------------+------------------+------------------+
+                                |                        |                          |                  |                  |
+                      send-message-binary        send-message-plain            send-close          send-ping          send-pong
+
+
+■ 基本的な書式
+
+    付属されているWebSocket.php, WebSocketClient.php, WebSocketException.phpを読み込んでください。
+    その後、インスタンス化、イベント登録を行い、サーバーを起動します。
+
+    単純な例:
+
+        <?php
+
+            include 'WebSocket.php';
+            include 'WebSocketClient.php';
+            include 'WebSocketException.php';
+
+            $ws = new WebSocket('0.0.0.0', 8484);
+
+            $ws->registerEvent('connect', function ($handle) {
+                printf("%s:%dが接続しました。\n", $handle->address, $handle->port);
+            });
+
+            $ws->registerEvent('disconnect', function ($handle) {
+                printf("%s:%dが切断しました。\n", $handle->address, $handle->port);
+            });
+
+            $ws->serverRun(function () {
+                printf("Running Server!\n");
+            });
+
+■ その他の記述について
+
+    詳しくはサンプルのserver.php, ./sample-chat/index.html, ./sample-time/index.html をご覧下さい。

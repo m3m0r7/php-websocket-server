@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+        <script>
+            
+            if (typeof WebSocket === 'undefined') {
+                var ws = new MozWebSocket("ws://localhost:8484/time");
+            } else {
+                var ws = new WebSocket("ws://localhost:8484/time");
+            }
+
+            $(function(){
+
+                ws.onmessage = function (event) {
+
+                    var date = new Date();
+                    date.setTime(event.data * 1000);
+
+                    $('#time').text("現在の時刻：" + date.toString());
+
+                }
+
+            });
+        </script>
+    </head>
+    <body>
+        <h1>WebSocket 時間取得テスト</h1>
+        <div id="time">取得中...</div>
+    </body>
+</html>
