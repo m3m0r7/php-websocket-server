@@ -8,7 +8,11 @@ class WebSocket {
 
     public $clients = array();
 
+    public $callEvent = true;
+
     public $events = array();
+
+    public $pingProbability = 1;
 
     private $versions = array(
         7, 8, 13
@@ -60,8 +64,6 @@ class WebSocket {
 
         }
 
-        @socket_set_option($this->handle, SOL_SOCKET, SO_REUSEADDR, 1);
-
         // イベントハンドラの初期化
 
         $this->events = $this->initEvents;
@@ -71,15 +73,21 @@ class WebSocket {
 
     }
 
-    public function triggerEvent ($eventName, $clientHandle) {
+    public function triggerEvent ($eventName, &$clientHandle) {
 
-        if ($clientHandle !== null && ($clientHandle instanceof WebSocketClient) === true && isset($this->events['__resource__'][$clientHandle->resource]) === true && $this->events['__resource__'][$clientHandle->resource][$eventName] !== false) {
+        if ($this->callEvent === false) {
+
+            return;
+
+        }
+
+        if (($clientHandle instanceof WebSocketClient) === true && isset($this->events['__resource__'][$clientHandle->resource]) === true && $this->events['__resource__'][$clientHandle->resource][$eventName] !== false) {
 
             call_user_func_array($this->events['__resource__'][$clientHandle->resource][$eventName], array_slice(func_get_args(), 1));
 
         }
 
-        if (isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
+        if (($clientHandle instanceof WebSocketClient) === true && isset($clientHandle->client) === true && isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
 
             call_user_func_array($this->events[$eventName], array_slice(func_get_args(), 1));
 
@@ -211,7 +219,10 @@ class WebSocket {
                     $client->sendCommand($message, $opcode, $useMask);
 
                 }
+
             } catch (WebSocketException $e) {
+
+                printf("%s\n", $e->getMessage());
 
             }
 
@@ -221,16 +232,32 @@ class WebSocket {
 
     public function serverRun ($callback = null) {
 
-        // サーバーハンドルはノンブロッキングモード
+        $write = null;
+        $except = null;
+
+        socket_set_option($this->handle, SOL_SOCKET, SO_REUSEADDR, 1);
+
+        WebSocketClient::setServer ($this);
+
+        mb_detect_order(array(
+
+            'UTF-8',
+            'SJIS-win',
+            'eucJP-win',
+            'SJIS',
+            'EUC-JP',
+            'ISO-2022-JP',
+            'JIS',
+            'UTF-7',
+            'ASCII'
+
+        ));
 
         if (is_callable($callback) === true) {
 
             $callback($this);
 
         }
-
-        $write = null;
-        $except = null;
 
         while (true) {
 
@@ -240,15 +267,35 @@ class WebSocket {
 
             foreach ($sockets as $handle) {
 
-                if ($handle === $this->handle) {
+                try {
 
-                    $this->registerClient();
+                    if ($handle === $this->handle) {
 
-                } else {
+                        $this->registerClient();
 
-                    $this->getClient($handle)->getMessage();
+                    } else {
+
+                        $clientHandle = $this->getClient($handle);
+
+                        if ($clientHandle !== false) {
+
+                            $clientHandle->getMessage();
+
+                        }
+
+                    }
+
+                } catch (WebSocketException $e) {
+
+                    printf("%s\n", $e->getMessage());
 
                 }
+
+            }
+
+            if (mt_rand(0, 100) <= $this->pingProbability) {
+
+                $this->broadcastPing();
 
             }
 
@@ -262,7 +309,7 @@ class WebSocket {
 
             socket_set_option($client, SOL_SOCKET, SO_REUSEADDR, 1);
 
-            $clientHandle = new WebSocketClient($this, $client);
+            $clientHandle = new WebSocketClient($client);
 
             $header = array();
 
@@ -337,6 +384,7 @@ class WebSocket {
 
             // connect イベント
             $this->triggerEvent ('connect', $clientHandle);
+
 
         }
 

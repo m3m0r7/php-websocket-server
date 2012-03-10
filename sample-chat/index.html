@@ -25,7 +25,7 @@
                         $('#addr').html(addr + "さん");
 
                     } else {
-
+                        console.log(event.data);
                         $('#chat').append('<p class="line ' + (event.data[0] === '>' ? 'mysay' : '') + '">' + event.data + '</p>');
 
                         $('#chat').scrollTop(99999);
@@ -40,8 +40,10 @@
 
                 }
 
-                $('#send').click(function(){
+                $('#form').submit(function(){
                     ws.send($('#message').val());
+                    $('#message').val('');
+                    return false;
                 });
 
                 $('#close').click(function(){
@@ -77,7 +79,7 @@
     </head>
     <body>
         <h1>WebSocket チャットサンプル</h1>
-        <form action="javascript:void(0);" method="post">
+        <form id="form" action="javascript:void(0);" method="post">
 
             <p id="addr">取得中...</p>
 
