@@ -25,7 +25,7 @@
                         $('#addr').html(addr + "さん");
 
                     } else {
-                        console.log(event.data);
+                        
                         $('#chat').append('<p class="line ' + (event.data[0] === '>' ? 'mysay' : '') + '">' + event.data + '</p>');
 
                         $('#chat').scrollTop(99999);
