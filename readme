@@ -100,6 +100,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
                 $message - 送信メッセージの内容
 
+        - broadcastBinaryMessage ($message)
+
+            全クライアントにバイナリメッセージを送信します。
+
+            [引数]
+
+                $message - 送信メッセージの内容
+
         - broadcastCommand ($message, $opcode = 0x01, $useMask = false)
 
             全クライアントにメッセージを送信します。 (broadcastMessageと違い詳細設定が可能。)

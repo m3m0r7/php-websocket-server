@@ -170,6 +170,12 @@ class WebSocket {
 
     }
 
+    public function broadcastBinaryMessage ($message) {
+
+        $this->broadcastCommand ($message, 0x02);
+
+    }
+
     public function broadcastCommand ($message, $opcode = 0x01, $useMask = false) {
 
         $messageDivide = is_array($message);
