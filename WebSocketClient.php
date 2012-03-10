@@ -209,7 +209,7 @@ class WebSocketClient {
                 case 0x01:
 
                     // テキスト (UTF-8)
-                    
+
                     self::$server->triggerEvent ('received-message', $this, $string, false);
 
                     self::$server->triggerEvent ('received-message-plain', $this, $string);
@@ -408,8 +408,13 @@ class WebSocketClient {
 
             $this->close();
 
-            throw new WebSocketException('Socket.ReadBuffer.Exception -> ' . socket_strerror($errorid), $errorid);
+            if ($errorid !== 0) {
 
+                throw new WebSocketException('Socket.ReadBuffer.Exception -> ' . socket_strerror($errorid), $errorid);
+
+            }
+
+            return '';
         }
 
         return $data;
@@ -430,8 +435,13 @@ class WebSocketClient {
 
             $this->close();
 
-            throw new WebSocketException('Socket.WriteBuffer.Exception -> ' . socket_strerror($errorid), $errorid);
 
+            if ($errorid !== 0) {
+
+                throw new WebSocketException('Socket.WriteBuffer.Exception -> ' . socket_strerror($errorid), $errorid);
+
+            }
+            
         }
 
     }
