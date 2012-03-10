@@ -12,6 +12,7 @@ class WebSocketClient {
     public $timestamp;
 
     public $resource = null;
+    public $version = -1;
 
     public function __construct (&$serverHandle, $clientHandle) {
 
