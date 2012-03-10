@@ -206,15 +206,33 @@ class WebSocket {
 
                     if ($client === $message[0]) {
 
+                        if ($message[1] === false) {
+
+                            continue;
+
+                        }
+
                         $client->sendCommand($message[1], $opcode, $useMask);
 
                     } else {
+
+                        if ($message[2] === false) {
+
+                            continue;
+
+                        }
 
                         $client->sendCommand($message[2], $opcode, $useMask);
 
                     }
 
                 } else {
+
+                    if ($message === false) {
+
+                        continue;
+
+                    }
 
                     $client->sendCommand($message, $opcode, $useMask);
 
