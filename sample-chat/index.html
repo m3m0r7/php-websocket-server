@@ -7,9 +7,9 @@
         <script>
 
             if (typeof WebSocket === 'undefined') {
-                var ws = new MozWebSocket("ws://localhost:8484/chat");
+                var ws = new MozWebSocket("ws://" + location.host + ":8484/chat");
             } else {
-                var ws = new WebSocket("ws://localhost:8484/chat");
+                var ws = new WebSocket("ws://" + location.host + ":8484/chat");
             }
 
             $(function(){

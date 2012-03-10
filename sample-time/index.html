@@ -5,11 +5,11 @@
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
         <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
         <script>
-            
+
             if (typeof WebSocket === 'undefined') {
-                var ws = new MozWebSocket("ws://localhost:8484/time");
+                var ws = new MozWebSocket("ws://" + location.host + ":8484/time");
             } else {
-                var ws = new WebSocket("ws://localhost:8484/time");
+                var ws = new WebSocket("ws://" + location.host + ":8484/time");
             }
 
             $(function(){
