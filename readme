@@ -20,6 +20,23 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 修正ログ:
 
+2012/3/11:
+
+    Add
+        * クライアント個々にユニークIDが割り振られるようになりました。
+        * broadcast系の送信方法が一部変更になりました。詳しくは下記の「broadcast系のメソッドについて」をご覧下さい
+        * WebSocket::$pingProbabilityを追加
+        * WebSocket::$callEventを追加
+        * WebSocket::getClientById ($id)を追加
+        * WebSocket::getClientBySocket ($client)を追加
+        * WebSocket::getClientSockets ()を追加
+        * WebSocket::getClientIds ()を追加
+        * WebSocket::getConnectClients ()を追加
+        * WebSocketClient::$idを追加
+
+    Fixed
+        * 一部のメンバをprivateに変更しました。
+
 2012/3/10:
 
     Add
@@ -64,6 +81,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 ■ メソッド解説
 
     ○ WebSocket クラス
+
+        - $pingProbability
+
+            pingを送信する確率を指定します。例えば10と指定したら、誰かが接続またはソケットに書き込んだ際に10%の確率で
+            クライアント全員に送信することになります。0を指定すると送信しなくなります。デフォルトは1です。
+
+        - $callEvent
+
+            イベントを発動するかの設定をします。falseを指定すると発動しなくなります。デフォルトはtrueです。
 
         - triggerEvent ($eventName, $clientHandle)
 
@@ -147,8 +173,40 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
                 $callback - サーバー起動時に使用するコールバック関数。第一引数に自身のWebSocketクラスが参照渡しで入ります。
 
+        - getClientById ($id)
+
+            $idからWebSocketClientクラスを探して返します。
+
+            [引数]
+
+                $id - クライアントに割り振られたid
+
+        - getClientBySocket ($socket)
+
+            $socketからWebSocketClientクラスを探して返します。
+
+            [引数]
+
+                $socket - クライアントのソケット
+
+        - getClientSockets ()
+
+            接続している全クライアントのソケットを配列で返します。
+
+        - getClientIds ()
+
+            接続している全クライアントのIDを配列で返します。
+
+        - getConnects ()
+
+            接続している人数を返します。
+
 
     ○ WebSocketClient クラス
+
+        - $id
+
+            割り振られたID
 
         - $address
 
@@ -255,6 +313,23 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
             );
 
         と指定した場合$clientが指すクライアントにはMeが送信され、それ以外のユーザーにはAnyoneが送信されます。
+        また、添字1をfalseに指定した場合、$clientが指すクライアントには送信されず、それ以外のユーザーにはAnyoneが送信され、
+        逆に添字2をfalseにした場合$clientが指すクライアントにのみMeが送信されるようになります。
+
+        これは、添字2をfalseにした場合は$client->sendMessage($message);と同等で、
+        添字1をfalseにした場合
+
+        foreach ($server->getClients() as $c) {
+
+            if ($c != $client) {
+
+                $c->sendMessage($message);
+
+            }
+
+        }
+
+        と同等になります。
 
 ■ イベント名について
 

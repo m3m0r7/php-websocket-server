@@ -4,19 +4,17 @@ class WebSocket {
 
     const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
-    public $handle = null;
-
-    public $clients = array();
-
     public $callEvent = true;
-
-    public $events = array();
 
     public $pingProbability = 1;
 
     private $versions = array(
         7, 8, 13
     );
+
+    private $clients = array();
+
+    private $events = array();
 
     private $initEvents = array(
 
@@ -47,6 +45,8 @@ class WebSocket {
         'received-message-binary' => false
 
     );
+
+    private $handle = null;
 
     public function __construct ($ip, $port) {
 
@@ -87,7 +87,7 @@ class WebSocket {
 
         }
 
-        if (($clientHandle instanceof WebSocketClient) === true && isset($clientHandle->client) === true && isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
+        if (($clientHandle instanceof WebSocketClient) === true && $clientHandle->hasSocket() === true && isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
 
             call_user_func_array($this->events[$eventName], array_slice(func_get_args(), 1));
 
@@ -279,7 +279,7 @@ class WebSocket {
 
         while (true) {
 
-            $sockets = array_merge(array($this->handle), $this->getClientResources());
+            $sockets = array_merge(array($this->handle), $this->getClientSockets());
 
             @socket_select($sockets, $write, $except, null);
 
@@ -293,7 +293,7 @@ class WebSocket {
 
                     } else {
 
-                        $clientHandle = $this->getClient($handle);
+                        $clientHandle = $this->getClientBySocket($handle);
 
                         if ($clientHandle !== false) {
 
@@ -311,7 +311,7 @@ class WebSocket {
 
             }
 
-            if (mt_rand(0, 100) <= $this->pingProbability) {
+            if ($this->pingProbability > 0 && mt_rand(1, 100) <= $this->pingProbability) {
 
                 $this->broadcastPing();
 
@@ -358,6 +358,7 @@ class WebSocket {
             }
 
             $resource = trim($match[1]);
+
             $clientHandle->resource = $resource === '/' ? '/' : substr($resource, 1);
 
             $clientHandle->version = isset($header['sec-websocket-version']) === false ? -1 : (int) $header['sec-websocket-version'];
@@ -398,6 +399,8 @@ class WebSocket {
 
             $clientHandle->write($handshake);
 
+            $clientHandle->id = md5($clientHandle->address . $clientHandle->port . $clientHandle->resource . $clientHandle->version);
+
             $this->clients[] = $clientHandle;
 
             // connect イベント
@@ -410,11 +413,11 @@ class WebSocket {
 
     }
 
-    private function getClient ($client) {
+    public function getClientById ($id) {
 
         foreach ($this->clients as $_) {
 
-            if ($_->getResource() === $client) {
+            if ($_->id === $id) {
 
                 return $_;
 
@@ -426,17 +429,91 @@ class WebSocket {
 
     }
 
-    private function getClientResources () {
+    public function getClientBySocket ($socket) {
+
+        foreach ($this->clients as $_) {
+
+            if ($_->getSocket() === $socket) {
+
+                return $_;
+
+            }
+
+        }
+
+        return false;
+
+    }
+
+    public function getClientSockets () {
 
         $sockets = array();
 
         foreach ($this->clients as $_) {
 
-            $sockets[] = $_->getResource();
+            $sockets[] = $_->getSocket();
 
         }
 
         return $sockets;
+
+    }
+
+    public function getClients () {
+
+        return $this->clients;
+
+    }
+
+    public function getConnects () {
+
+        return sizeof($this->clients);
+
+    }
+
+    public function getClientIds () {
+
+        $ids = array();
+
+        foreach ($this->clients as $_) {
+
+            $ids[] = $_->id;
+
+        }
+
+        return $ids;
+
+    }
+
+    public function removeClientByInstance ($client) {
+
+        if (($key = array_search($client, $this->clients, true)) !== false) {
+
+            unset($this->clients[$key]);
+
+            return true;
+
+        }
+
+        return false;
+
+    }
+
+    public function removeClientById ($id) {
+
+        foreach ($this->clients as $key => $_) {
+
+            if ($_->id === $id) {
+
+                unset($this->clients[$key]);
+
+                return true;
+
+            }
+
+        }
+
+        return false;
 
     }
 

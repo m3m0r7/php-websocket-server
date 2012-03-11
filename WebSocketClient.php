@@ -3,16 +3,18 @@
 
 class WebSocketClient {
 
-    public $client;
-    private static $server;
-
     public $address;
     public $port;
 
     public $timestamp;
 
+    public $id;
+
     public $resource = null;
     public $version = -1;
+
+    private $client;
+    private static $server;
 
     public static function setServer (&$server) {
 
@@ -47,14 +49,13 @@ class WebSocketClient {
 
     public function __destruct () {
 
-        if (($key = array_search($this, self::$server->clients, true)) !== false) {
+        if (in_array($this, self::$server->getClients (), true) === true) {
 
             $trigger = is_resource($this->client) ? $this : null;
 
             self::$server->triggerEvent ('disconnect', $trigger);
 
-            // 存在しない。
-            unset(self::$server->clients[$key]);
+            self::$server->removeClientByInstance($this);
 
             @socket_close($this->client);
 
@@ -64,15 +65,21 @@ class WebSocketClient {
 
     }
 
-    private function close () {
+    public function getSocket () {
 
-        $this->__destruct();
+        return $this->client;
 
     }
 
-    public function getResource () {
+    public function hasSocket () {
 
-        return $this->client;
+        return isset($this->client);
+
+    }
+
+    public function close () {
+
+        $this->__destruct();
 
     }
 
@@ -441,7 +448,7 @@ class WebSocketClient {
                 throw new WebSocketException('Socket.WriteBuffer.Exception -> ' . socket_strerror($errorid), $errorid);
 
             }
-            
+
         }
 
     }
