@@ -309,7 +309,7 @@ class WebSocketClient {
 
     public function sendMessage ($message) {
 
-        $this->sendCommand ($message, 0x01);
+        $this->sendCommand ($message, 0x01, true);
 
         self::$server->triggerEvent ('send-message-plain', $this, $message);
 
@@ -337,10 +337,10 @@ class WebSocketClient {
 
         if ($useMask === true) {
 
-            $body .= $mask[0] = mt_rand(0, 255);
-            $body .= $mask[1] = mt_rand(0, 255);
-            $body .= $mask[2] = mt_rand(0, 255);
-            $body .= $mask[3] = mt_rand(0, 255);
+            $body .= $mask[0] = chr(mt_rand(0, 255));
+            $body .= $mask[1] = chr(mt_rand(0, 255));
+            $body .= $mask[2] = chr(mt_rand(0, 255));
+            $body .= $mask[3] = chr(mt_rand(0, 255));
 
         }
 
