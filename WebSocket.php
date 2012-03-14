@@ -399,13 +399,14 @@ class WebSocket {
 
             $clientHandle->write($handshake);
 
-            $clientHandle->id = md5($clientHandle->address . $clientHandle->port . $clientHandle->resource . $clientHandle->version);
+            $clientHandle->id = sha1($clientHandle->timestamp . $clientHandle->address . $clientHandle->port . $clientHandle->resource . $clientHandle->version);
 
             $this->clients[] = $clientHandle;
 
             // connect イベント
             $this->triggerEvent ('connect', $clientHandle);
 
+            return true;
 
         }
 

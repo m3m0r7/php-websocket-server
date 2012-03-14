@@ -20,6 +20,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 修正ログ:
 
+2012/3/14:
+
+    Changed
+        * ユニークなIDの生成の方法に問題がありましたので、生成方法を変更しました。
+
 2012/3/13:
 
     Fixed
