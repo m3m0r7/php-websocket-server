@@ -2,21 +2,33 @@
 
 class WebSocket {
 
+    const VERSION = '2.0.0';
     const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
     public $callEvent = true;
 
     public $pingProbability = 1;
 
-    private $versions = array(
-        7, 8, 13
-    );
-
     private $clients = array();
 
     private $events = array();
 
+    private $maxResourceClients = array();
+
+    private $maxServerClients = -1;
+
+    private $displayExceptions = false;
+
+    private $checkOrigin = false;
+
+    private $port = 0;
+
+    private $address = '0.0.0.0';
+
     private $initEvents = array(
+
+        'overflow-connection' => false,
+        'failure-connection' => false,
 
         'connect' => false,
         'disconnect' => false,
@@ -25,9 +37,6 @@ class WebSocket {
 
         'send-ping' => false,
         'send-pong' => false,
-        'send-header' => false,
-        'send-body' => false,
-
         'send-close' => false,
 
         'send-message' => false,
@@ -52,6 +61,9 @@ class WebSocket {
 
         $this->handle = @socket_create (AF_INET, SOCK_STREAM, SOL_TCP);
 
+        $this->port = $port;
+        $this->address = $ip;
+
         if (@socket_bind($this->handle, $ip, $port) === false) {
 
             throw new WebSocketException('Socket.Bind.Exception');
@@ -68,12 +80,22 @@ class WebSocket {
 
         $this->events = $this->initEvents;
 
+        // サーバーイベントハンドラ
+        $this->events['server-connect'] = false;
+        $this->events['server-overflow-connection'] = false;
+        $this->events['server-failure-connection'] = false;
+
         // リソースハンドラ
         $this->events['__resource__'] = array();
+
+        // 登録しておく。
+        $this->registerResource('/');
 
     }
 
     public function triggerEvent ($eventName, &$clientHandle) {
+
+        static $_s = 7; // strlen('server-')
 
         if ($this->callEvent === false) {
 
@@ -87,23 +109,33 @@ class WebSocket {
 
         }
 
-        if (($clientHandle instanceof WebSocketClient) === true && $clientHandle->hasSocket() === true && isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
+        if (isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
 
-            call_user_func_array($this->events[$eventName], array_slice(func_get_args(), 1));
+            if (($clientHandle instanceof WebSocketClient) === true && $clientHandle->hasSocket() === true) {
+
+                call_user_func_array($this->events[$eventName], array_slice(func_get_args(), 1));
+
+            } else if (substr($eventName, 0, $_s) === 'server-') {
+
+                call_user_func($this->events[$eventName]);
+
+            }
 
         }
 
     }
 
-    public function registerResource ($resource) {
+    public function registerResource ($resource, $maxClients = -1) {
 
-        if (is_string($resource) === false) {
+        if (is_string($resource) === false || isset($this->events['__resource__'][$resource]) === true) {
 
             throw new WebSocketException('Register.Resource.Name.Exception');
 
         }
 
         $this->events['__resource__'][$resource] = $this->initEvents;
+        $this->maxResourceClients[$resource]['size'] = (int) $maxClients;
+        $this->maxResourceClients[$resource]['connections'] = 0;
 
     }
 
@@ -134,12 +166,11 @@ class WebSocket {
 
         if (is_string($resource) === true) {
 
-            if ($resource === '__resource__' || isset($this->events['__resource__'][$resource]) === false) {
+            if ($resource === '__resource__' || isset($this->events['__resource__'][$resource]) === false || isset($this->events['__resource__'][$resource][$eventName]) === false) {
 
                 throw new WebSocketException('Register.Event.Resource.Exception');
 
             }
-
             $this->events['__resource__'][$resource][$eventName] = $callback;
 
         } else {
@@ -250,8 +281,9 @@ class WebSocket {
 
     public function serverRun ($callback = null) {
 
-        $write = null;
-        $except = null;
+        $dummy = null;
+
+        ob_implicit_flush (true);
 
         socket_set_option($this->handle, SOL_SOCKET, SO_REUSEADDR, 1);
 
@@ -281,7 +313,7 @@ class WebSocket {
 
             $sockets = array_merge(array($this->handle), $this->getClientSockets());
 
-            @socket_select($sockets, $write, $except, null);
+            @socket_select($sockets, $dummy, $dummy, null);
 
             foreach ($sockets as $handle) {
 
@@ -289,7 +321,17 @@ class WebSocket {
 
                     if ($handle === $this->handle) {
 
-                        $this->registerClient();
+                        $this->triggerEvent ('server-connect', $dummy);
+
+                        if ($this->maxServerClients > -1 && (sizeof($this->clients) + 1) > $this->maxServerClients) {
+
+                            $this->sendHandShakeError (null, 503);
+
+                        } else {
+
+                            $this->registerClient();
+
+                        }
 
                     } else {
 
@@ -305,7 +347,9 @@ class WebSocket {
 
                 } catch (WebSocketException $e) {
 
-                    printf("%s\n", $e->getMessage());
+                    if ($this->displayExceptions === true) {
+                        printf("%s\n", $e->getMessage());
+                    }
 
                 }
 
@@ -333,7 +377,9 @@ class WebSocket {
 
             $state = false;
 
-            foreach(explode("\n", trim($clientHandle->read())) as $line) {
+            $request = $clientHandle->read();
+
+            foreach(explode("\n", trim($request)) as $line) {
 
                 if ($state === false) {
 
@@ -353,6 +399,8 @@ class WebSocket {
 
             if (isset($header[0]) === false || preg_match('/^GET (.*?) HTTP/i', $header[0], $match) === 0) {
 
+                $this->sendHandShakeError ($clientHandle, 400);
+
                 return false;
 
             }
@@ -361,45 +409,168 @@ class WebSocket {
 
             $clientHandle->resource = $resource === '/' ? '/' : substr($resource, 1);
 
-            $clientHandle->version = isset($header['sec-websocket-version']) === false ? -1 : (int) $header['sec-websocket-version'];
+            if ($clientHandle->resource !== '/' && isset($this->maxResourceClients[$clientHandle->resource]) === false) {
 
-            if (in_array($clientHandle->version, $this->versions) === false) {
-
-                $handshake = "HTTP/1.1 400 Bad Request\r\n";
-                $handshake .= "Sec-WebSocket-Version: " . implode(',', $this->versions) . "\r\n";
-                $handshake .= "\r\n";
-
-                $clientHandle->write($handshake);
-
-                $clientHandle->close();
+                $this->sendHandShakeError ($clientHandle, 400);
 
                 return false;
 
             }
 
-            if (isset($header['sec-websocket-key']) === false) {
+            $clientHandle->version = isset($header['sec-websocket-version']) === false ? 0 : (int) $header['sec-websocket-version'];
 
-                $handshake = "HTTP/1.1 400 Bad Request\r\n";
+            if (isset($header['sec-websocket-key']) === true) {
+
+                $clientHandle->rfc = true;
+
+                if ($this->checkOrigin !== false) {
+
+                    if (isset($header['origin']) === false && isset($header['sec-websocket-origin']) === false) {
+
+                        $this->sendHandShakeError ($client, 400);
+
+                        return false;
+
+                    }
+
+                    $check = parse_url(isset($header['host']) === true ? $header['host'] : (isset($header['origin']) === true ? $header['origin'] : $header['sec-websocket-origin']));
+
+                    if (isset($check['host']) === false || in_array($check['host'], $this->checkOrigin) === false || (($this->port !== 80 && $this->port !== 443 && isset($check['port']) === false) || $this->port !== $check['port'])) {
+
+                        $this->sendHandShakeError ($client, 400);
+
+                        return false;
+
+                    }
+
+                }
+
+                // send handshake
+                $handshake = "HTTP/1.1 101 Switching Protocols\r\n";
+                $handshake .= "Upgrade: websocket\r\n";
+                $handshake .= "Connection: Upgrade\r\n";
+                $handshake .= "Sec-WebSocket-Accept: " . base64_encode(sha1($header['sec-websocket-key'] . WebSocket::GUID, true)) . "\r\n";
                 $handshake .= "\r\n";
+                $clientHandle->write($handshake);
+
+            } else if (isset($header['sec-websocket-key1'], $header['sec-websocket-key2'], $header['host']) === true) {
+
+                $clientHandle->rfc = false;
+
+                if (isset($header['origin']) === false && isset($header['sec-websocket-origin']) === false) {
+
+                    $this->sendHandShakeError ($clientHandle, 400);
+
+                    return false;
+
+                }
+
+                $origin = isset($header['origin']) === true ? $header['origin'] : $header['sec-websocket-origin'];
+
+                if ($this->checkOrigin !== false) {
+
+                    $check = parse_url(isset($header['host']) === true ? $header['host'] : (isset($header['origin']) === true ? $header['origin'] : $header['sec-websocket-origin']));
+
+                    if (isset($check['host']) === false || in_array($check['host'], $this->checkOrigin) === false || (($this->port !== 80 && $this->port !== 443 && isset($check['port']) === false) || $this->port !== $check['port'])) {
+
+                        $this->sendHandShakeError ($client, 400);
+
+                        return false;
+
+                    }
+
+                }
+
+                // 許可キー
+                $accept = '';
+
+                // 固定の最大サイズ
+                $maxDigitSize = 10;
+
+                // get spaces
+                for ($i = 0; $i < 2; $i++) {
+
+                    $spaces = 0;
+                    $digit = '';{
+                    $char = $header['sec-websocket-key' . ($i + 1)];
+
+                    for ($j = 0, $size = strlen($char); $j < $size; $j++)
+                        if (substr_count('0123456789', $char[$j]) > 0) {
+                            $digit .= $char[$j];
+                        } else if ($char[$j] === ' ') {
+                            $spaces++;
+                        }
+                    }
+
+                    if ($spaces === 0 || strlen($digit) > $maxDigitSize) {
+
+                        // zero...
+
+                        $this->sendHandShakeError ($clientHandle, 400);
+
+                        return false;
+
+                    }
+
+                    // 11桁以上いかないので、floatで計算しても問題ない。
+                    $accept .= pack('N', (int) (((float) $digit) / ((float) $spaces)));
+
+                }
+
+                $handshake = "HTTP/1.1 101 WebSocket Protocol Handshake\r\n";
+                $handshake .= "Upgrade: WebSocket\r\n";
+                $handshake .= "Connection: Upgrade\r\n";
+                $handshake .= "Sec-WebSocket-Origin: " . $origin . "\r\n";
+                $handshake .= "Sec-WebSocket-Location: ws://" . $header['host'] . "/" . ($clientHandle->resource !== '/' ? $clientHandle->resource  : '') . "\r\n";
+                $handshake .= "\r\n";
+
+                // find body from request
+                $body = '';
+                for ($i = 0, $size = strlen($request); $i < $size; $i++) {
+                    if ($request[$i] === "\r" && isset($request[$i + 1], $request[$i + 2], $request[$i + 3]) === true && $request[$i + 1] === "\n" && $request[$i + 2] === "\r" && $request[$i + 3] === "\n") {
+                        $i += 4;
+                        break;
+                    } else if ($request[$i] === "\n" && isset($request[$i + 1]) === true && $request[$i + 1] === "\n") {
+                        $i += 2;
+                        break;
+                    }
+                }
+                $body = substr($request, $i);
+
+                // attack code?
+                if (strlen($body) !== 8) {
+
+                    $this->sendHandShakeError ($clientHandle, 400);
+
+                    return false;
+
+                }
+
+                // to binary
+                $handshake .= md5($accept . $body, true);
 
                 $clientHandle->write($handshake);
 
-                $clientHandle->close();
+            } else {
+
+                $this->sendHandShakeError ($clientHandle, 400);
 
                 return false;
 
             }
-
-            // send handshake
-            $handshake = "HTTP/1.1 101 Switching Protocols\r\n";
-            $handshake .= "Upgrade: websocket\r\n";
-            $handshake .= "Connection: Upgrade\r\n";
-            $handshake .= "Sec-WebSocket-Accept: " . base64_encode(sha1($header['sec-websocket-key'] . WebSocket::GUID, true)) . "\r\n";
-            $handshake .= "\r\n";
-
-            $clientHandle->write($handshake);
 
             $clientHandle->id = sha1($clientHandle->timestamp . $clientHandle->address . $clientHandle->port . $clientHandle->resource . $clientHandle->version);
+
+            if ($this->maxResourceClients[$clientHandle->resource]['size'] > -1 && ($this->maxResourceClients[$clientHandle->resource]['connections'] + 1) > $this->maxResourceClients[$clientHandle->resource]['size']) {
+
+                $this->sendHandShakeError ($clientHandle, 503);
+
+                return false;
+
+            }
+
+            // 接続数の増加
+            $this->maxResourceClients[$clientHandle->resource]['connections']++;
 
             $this->clients[] = $clientHandle;
 
@@ -411,6 +582,59 @@ class WebSocket {
         }
 
         return false;
+
+    }
+
+    private function sendHandShakeError (&$clientHandle, $errorid = 400) {
+
+        $status = 'HTTP/1.1 ';
+
+        switch ((int) $errorid) {
+            case 400:
+
+                $status .= '400 Bad Request';
+
+                if (($clientHandle instanceof WebSocketClient) === false) {
+
+                    $this->triggerEvent('server-failure-connection', $clientHandle);
+
+                } else {
+
+                    $this->triggerEvent('failure-connection', $clientHandle);
+
+                }
+            break;
+            case 503:
+
+                $status .= '503 Service Unavailable';
+
+                if (($clientHandle instanceof WebSocketClient) === false) {
+
+                    $this->triggerEvent('server-overflow-connection', $clientHandle);
+
+                } else {
+
+                    $this->triggerEvent('overflow-connection', $clientHandle);
+
+                }
+
+            break;
+        }
+
+        $handshake = $status . "\r\n";
+        $handshake .= "\r\n";
+
+        if (($clientHandle instanceof WebSocketClient) === false) {
+
+            @socket_write($clientHandle, $handshake);
+
+        } else {
+
+            $clientHandle->write($handshake);
+
+            $clientHandle->close();
+
+        }
 
     }
 
@@ -466,7 +690,7 @@ class WebSocket {
 
     }
 
-    public function getConnects () {
+    public function getConnections () {
 
         return sizeof($this->clients);
 
@@ -486,13 +710,39 @@ class WebSocket {
 
     }
 
+    public function searchClientKeyByInstance ($client) {
+
+        foreach ($this->clients as $key => $_) {
+
+            if ($client === $_) {
+
+                return $key;
+
+            }
+
+        }
+
+        return false;
+
+    }
+
     public function removeClientByInstance ($client) {
 
-        if (($key = array_search($client, $this->clients, true)) !== false) {
+        if (($key = $this->searchClientKeyByInstance ($client)) !== false) {
 
             unset($this->clients[$key]);
 
-            return true;
+        }
+
+        return false;
+
+    }
+
+    public function removeClientByKey ($key) {
+
+        if (isset($this->clients[$key]) === true) {
+
+            unset($this->clients[$key]);
 
         }
 
@@ -515,6 +765,97 @@ class WebSocket {
         }
 
         return false;
+
+    }
+
+    public function setMaxServerClients ($size) {
+        $this->maxServerClients = (int) $size;
+    }
+
+    public function getResourceConnections ($resource) {
+
+        $resource = (string) $resource;
+
+        if (isset($this->maxResourceClients[$resource]) === false) {
+
+            throw new WebSocketException('Get.Resource.Connections.Exception');
+
+        }
+
+        return $this->maxResourceClients[$resource]['connections'];
+
+    }
+
+    public function getAllResourceConnections () {
+
+        $result = array();
+
+        foreach ($this->maxResourceClients as $key => $value) {
+
+            if ($key === '/') {
+                continue;
+            }
+
+            $result[$key] = $value['connections'];
+
+        }
+
+        return $result;
+
+    }
+
+    public function setMaxResourceClients ($resource, $size) {
+
+        $resource = (string) $resource;
+
+        if (isset($this->maxResourceClients[$resource]) === false) {
+
+            throw new WebSocketException('Set.Max.Clients.Exception');
+
+        }
+
+        $this->maxResourceClients[$resource]['size'] = (int) $size;
+    }
+
+    public function setMaxAllResourceClients ($size) {
+
+        foreach ($this->maxResourceClients as $resource => $_) {
+
+            $this->maxResourceClients[$resource] = (int) $size;
+
+        }
+
+    }
+
+    public function setDisplayExceptions ($bool) {
+
+        $this->displayExceptions = (bool) $bool;
+
+    }
+
+    public function setCheckOrigin ($list) {
+
+        $this->checkOrigin = ($list === false ? false : (array) $list);
+
+    }
+
+    public function amountResourceConnections ($resource, $size) {
+
+        $resource = (string) $resource;
+
+        if (isset($this->maxResourceClients[$resource]) === false) {
+
+            throw new WebSocketException('Amount.Max.Clients.Exception');
+
+        }
+
+        if (($this->maxResourceClients[$resource]['connections'] + ((int) $size)) < 0) {
+
+            $size = 0;
+
+        }
+
+        $this->maxResourceClients[$resource]['connections'] += (int) $size;
 
     }
 

@@ -2,17 +2,20 @@
 
 class WebSocketClient {
 
-    public $address;
-    public $port;
+    public $rfc = false;
 
-    public $timestamp;
+    public $address = '0.0.0.0';
+    public $port = -1;
 
-    public $id;
+    public $timestamp = -1;
+
+    public $id = -1;
 
     public $resource = null;
     public $version = -1;
 
-    private $client;
+    private $client = null;
+
     private static $server;
 
     public static function setServer (&$server) {
@@ -48,19 +51,25 @@ class WebSocketClient {
 
     public function __destruct () {
 
-        if (in_array($this, self::$server->getClients (), true) === true) {
+        if (($key = self::$server->searchClientKeyByInstance ($this)) !== false) {
 
             $trigger = is_resource($this->client) ? $this : null;
 
-            self::$server->triggerEvent ('disconnect', $trigger);
+            self::$server->removeClientByKey($key);
 
-            self::$server->removeClientByInstance($this);
+            self::$server->amountResourceConnections ($this->resource, -1);
 
             @socket_close($this->client);
 
-            unset($this->client);
+            self::$server->triggerEvent ('disconnect', $trigger);
+
+        } else {
+
+            @socket_close($this->client);
 
         }
+
+        unset ($this->client);
 
     }
 
@@ -72,7 +81,7 @@ class WebSocketClient {
 
     public function hasSocket () {
 
-        return isset($this->client);
+        return isset($this->client) === true;
 
     }
 
@@ -90,146 +99,240 @@ class WebSocketClient {
 
     public function getMessage () {
 
-        $fin = 0x00;
+        if ($this->rfc === true) {
 
-        $string = '';
+            $fin = 0x00;
 
-        while ($fin === 0x00) {
+            $string = '';
 
-            $ptr = 0;
+            while ($fin === 0x00) {
 
-            $message = $this->read();
+                $ptr = 0;
 
-            self::$server->triggerEvent ('received', $this, $message);
+                $message = $this->read();
 
-            if (empty($message) === true || strlen($message) < 6) {
+                self::$server->triggerEvent ('received', $this, $message);
 
-                return false;
+                if (empty($message) === true || strlen($message) < 6) {
 
-            }
-
-            $fin = (ord($message[$ptr]) >> 7);
-
-            if ($fin < 0 || $fin > 1) {
-
-                $this->close();
-
-                return false;
-
-            }
-
-            // $rsv = array(0, 0, 0);
-
-            $opcode = ((ord($message[$ptr]) << 4) & 0xff) >> 4;
-
-            $ptr++;
-
-            $maskFlag = (ord($message[$ptr]) >> 7) & 0xff;
-
-            // サーバーは必ず受信するデータはマスクがセットされている。
-            if ($maskFlag !== 1) {
-
-                $this->close();
-
-                return false;
-
-            }
-
-            $type = ((ord($message[$ptr]) << 1) & 0xff) >> 1;
-
-            if ($type < 0 || $type > 127) {
-
-                $this->close();
-
-                return false;
-
-            }
-
-            $ptr++;
-
-            switch ($type) {
-
-                case 126:
-
-                    $size = (ord($message[$ptr]) * 256) + ord($message[++$ptr]);
-
-                    $ptr++;
-
-                break;
-
-                case 127:
-
-                    $size = 0;
-
-                    for ($i = 7; $i >= 0; $i--) $size += ord($message[$ptr + (7 - $i)]) * pow(256, $i);
-                    $size = (int) $size;
-
-                    $ptr += 8;
-
-                break;
-
-                default:
-
-                    $size = $type;
-
-                break;
-
-            }
-
-
-            if ($maskFlag === 1) {
-
-                // マスク
-                $mask = array();
-
-                $mask[0] = $message[$ptr];
-                $mask[1] = $message[$ptr + 1];
-                $mask[2] = $message[$ptr + 2];
-                $mask[3] = $message[$ptr + 3];
-
-                $ptr += 4;
-
-            }
-
-            if ($type === 126 || $type === 127) {
-
-                $data = (string) substr($message, $ptr, $size);
-
-                while (strlen($data) < $size) {
-
-                    $data .= $this->read($size);
+                    return false;
 
                 }
 
-            } else {
+                $fin = (ord($message[$ptr]) >> 7);
 
-                $data = substr($message, $ptr, $size);
+                if ($fin < 0 || $fin > 1) {
+
+                    $this->close();
+
+                    return false;
+
+                }
+
+                // $rsv = array(0, 0, 0);
+
+                $opcode = ((ord($message[$ptr]) << 4) & 0xff) >> 4;
+
+                $ptr++;
+
+                $maskFlag = (ord($message[$ptr]) >> 7) & 0xff;
+
+                // サーバーは必ず受信するデータはマスクがセットされている。
+
+                if ($maskFlag !== 1) {
+
+                    $this->close();
+
+                    return false;
+
+                }
+
+                $type = ((ord($message[$ptr]) << 1) & 0xff) >> 1;
+
+                if ($type < 0 || $type > 127) {
+
+                    $this->close();
+
+                    return false;
+
+                }
+
+                $ptr++;
+
+                switch ($type) {
+
+                    case 126:
+
+                        $size = current(unpack('n', $message[$ptr] . $message[$ptr + 1]));
+
+                        $ptr++;
+
+                    break;
+
+                    case 127:
+
+                        $size = 0;
+
+                        for ($i = 7; $i >= 0; $i--) $size += ord($message[$ptr + (7 - $i)]) * pow(256, $i);
+
+                        $size = (int) $size;
+
+                        $ptr += 8;
+
+                    break;
+
+                    default:
+
+                        $size = $type;
+
+                    break;
+
+                }
+
+
+                if ($maskFlag === 1) {
+
+                    // マスク
+                    $mask = array();
+
+                    $mask[0] = $message[$ptr];
+                    $mask[1] = $message[$ptr + 1];
+                    $mask[2] = $message[$ptr + 2];
+                    $mask[3] = $message[$ptr + 3];
+
+                    $ptr += 4;
+
+                }
+
+                if ($type === 126 || $type === 127) {
+
+                    $data = (string) substr($message, $ptr, $size);
+
+                    while (strlen($data) < $size) {
+
+                        $data .= $this->read($size);
+
+                    }
+
+                } else {
+
+                    $data = substr($message, $ptr, $size);
+
+                }
+
+                if ($maskFlag === 1) {
+
+                    $string .= self::packString ($data, $size, $mask);
+
+                } else {
+
+                    $string .= $data;
+
+                }
+
+                switch ($opcode) {
+
+                    case 0x00:
+
+                        // 継続
+
+                    break;
+
+                    case 0x01:
+
+                        if (mb_detect_encoding($string) !== 'UTF-8') {
+
+                            // UTF-8じゃないとか…
+                            $this->close();
+
+                            return false;
+
+                        }
+
+                        // テキスト (UTF-8)
+
+                        self::$server->triggerEvent ('received-message', $this, $string, false);
+
+                        self::$server->triggerEvent ('received-message-plain', $this, $string);
+
+                    break;
+                    case 0x02:
+
+                        // バイナリ
+
+                        self::$server->triggerEvent ('received-message', $this, $string, true);
+
+                        self::$server->triggerEvent ('received-message-binary', $this, $string);
+
+                    break;
+
+                    case 0x08:
+
+                        // セッションクローズ
+
+                        self::$server->triggerEvent ('received-close', $this, $string, true);
+
+                        $this->close();
+
+                        return false;
+
+                    break;
+
+                    case 0x09:
+
+                        // from ping
+
+                        self::$server->triggerEvent ('received-ping', $this, $string);
+
+                        $this->sendPong($string);
+
+                        return false;
+
+
+                    break;
+
+                    case 0x0A:
+
+                        // from pong
+
+                        self::$server->triggerEvent ('received-pong', $this, $string);
+
+                        return false;
+
+                    break;
+
+                    default:
+
+                        // 不明なOpcodeのユーザーは攻撃の可能性があるのでセッションを切る。
+
+                        $this->close();
+
+                        return false;
+
+
+                    break;
+
+                }
 
             }
 
-            if ($maskFlag === 1) {
+            return $string;
 
-                $string .= self::packString ($data, $size, $mask);
+        } else {
 
-            } else {
+            $message = $this->read();
 
-                $string .= $data;
+            if (strlen($message) >= 2) {
 
-            }
+                $frameType = ord($message[0]);
 
-            switch ($opcode) {
+                if ($frameType < 0x80) {
 
-                case 0x00:
+                    // text frame...
 
-                    // 継続
+                    $string = substr($message, 1, strlen($message) - 2);
 
-                break;
-
-                case 0x01:
-
-                    $detect = mb_detect_encoding($string);
-
-                    if ($detect !== 'UTF-8') {
+                    if (mb_detect_encoding($string) !== 'UTF-8') {
 
                         // UTF-8じゃないとか…
                         $this->close();
@@ -238,74 +341,51 @@ class WebSocketClient {
 
                     }
 
-                    // テキスト (UTF-8)
-
                     self::$server->triggerEvent ('received-message', $this, $string, false);
 
                     self::$server->triggerEvent ('received-message-plain', $this, $string);
 
-                break;
-                case 0x02:
+                    return $string;
 
-                    // バイナリ
+                } else if ($frameType >= 0x80 && $frameType <= 0xfe) {
 
-                    self::$server->triggerEvent ('received-message', $this, $string, true);
+                    // binary frame is no supported...
+
+                    self::$server->triggerEvent ('received-message', $this, $string, false);
 
                     self::$server->triggerEvent ('received-message-binary', $this, $string);
 
-                break;
+                    return false;
 
-                case 0x08:
+                } else if ($frameType === 0xff && ord($message[1]) === 0x00) {
 
-                    // セッションクローズ
-
+                    // send close
                     self::$server->triggerEvent ('received-close', $this, $string, true);
 
+                    // close handshake
+                    $this->sendClose();
+
+                } else {
+
+                    // 不明なフレーム
                     $this->close();
 
                     return false;
 
-                break;
+                }
 
-                case 0x09:
+            } else {
 
-                    // from ping
+                // 不明なフレーム
+                $this->close();
 
-                    self::$server->triggerEvent ('received-ping', $this, $string);
-
-                    $this->sendPong($string);
-
-                    return false;
-
-
-                break;
-
-                case 0x0A:
-
-                    // from pong
-
-                    self::$server->triggerEvent ('received-pong', $this, $string);
-
-                    return false;
-
-                break;
-
-                default:
-
-                    // 不明なOpcodeのユーザーは攻撃の可能性があるのでセッションを切る。
-
-                    $this->close();
-
-                    return false;
-
-
-                break;
+                return false;
 
             }
 
         }
 
-        return $string;
+        return false;
 
     }
 
@@ -365,73 +445,106 @@ class WebSocketClient {
 
     public function sendCommand ($message, $opcode = 0x01, $useMask = false) {
 
-        $message = (string) $message;
+        if ($this->rfc === true) {
 
-        $size = strlen($message);
-        $type = ($size >= 0xffff ? 127 : ($size < 0xffff && $size > 126 ? 126 : $size));
+            $message = (string) $message;
 
-        $body = chr(128 + $opcode);
-        $body .= chr(($useMask === true ? 128 : 0) + $type);
+            $size = strlen($message);
+            $type = ($size > 0xffff ? 127 : ($size <= 0xffff && $size >= 126 ? 126 : $size));
 
-        $mask = array();
+            $body = chr(128 + $opcode);
+            $body .= chr(($useMask === true ? 128 : 0) + $type);
 
-        if ($useMask === true) {
+            $mask = array();
 
-            $body .= $mask[0] = chr(mt_rand(0, 255));
-            $body .= $mask[1] = chr(mt_rand(0, 255));
-            $body .= $mask[2] = chr(mt_rand(0, 255));
-            $body .= $mask[3] = chr(mt_rand(0, 255));
+            switch ($type) {
 
-        }
+                case 126:
 
-        switch ($type) {
+                    $body .= pack('n', $size);
 
-            case 126:
+                break;
+                case 127:
 
-                $body .= strrev(pack('v', $size));
+                    foreach (str_split(sprintf('%064b', $size), 8) as $value) {
 
-                $this->write($body);
+                        $body .= chr(bindec($value));
 
-                self::$server->triggerEvent ('send-header', $this, $body);
+                    }
 
-                $body = '';
+                break;
 
-            break;
-            case 127:
+            }
 
-                foreach (str_split(str_pad(decbin($size), 64, '0', STR_PAD_LEFT), 8) as $value) $body .= chr(bindec($value));
+            if ($useMask === true) {
 
-                $this->write($body);
+                $body .= $mask[0] = chr(mt_rand(0, 255));
+                $body .= $mask[1] = chr(mt_rand(0, 255));
+                $body .= $mask[2] = chr(mt_rand(0, 255));
+                $body .= $mask[3] = chr(mt_rand(0, 255));
 
-                self::$server->triggerEvent ('send-header', $this, $body);
+                $body .= self::packString ($message, $size, $mask);
 
-                $body = '';
+            } else {
 
-            break;
+                $body .= $message;
 
-        }
+            }
 
-        if ($useMask === true) {
+            $this->write($body);
 
-            $body .= self::packString ($message, $size, $mask);
+            self::$server->triggerEvent ('send', $this, $message);
 
         } else {
 
-            $body .= $message;
+            switch ($opcode) {
+
+                case 0x01:
+
+                    // to TEXT FRAME
+
+                    $body = "\x00" . $message . "\xff";
+
+                    $this->write($body);
+
+                    self::$server->triggerEvent ('send', $this, $message);
+
+                break;
+
+                case 0x02:
+
+                    // unknown binary frames...
+                    return false;
+
+                break;
+
+                case 0x09:
+                case 0x0A:
+
+                    // なし。
+
+                break;
+
+                case 0x08:
+
+                    // to CLOSE FRAME
+
+                    $this->write("\xff\x00");
+
+                    // skip \xff\x00
+                    $this->read(2);
+
+                break;
+
+            }
 
         }
-
-        $this->write($body);
-
-        self::$server->triggerEvent ('send-body', $this, $body);
-
-        self::$server->triggerEvent ('send', $this, $message);
 
         return true;
 
     }
 
-    public function read ($size = 0xffff) {
+    public function read ($size = 0x0fffff) {
 
         if (is_resource($this->client) === false) {
 
@@ -441,7 +554,7 @@ class WebSocketClient {
 
         $data = '';
 
-        if ((@socket_recv($this->client, $data, $size, 0)) === false) {
+        if (($data = @socket_read($this->client, $size)) === false) {
 
             $errorid = @socket_last_error ($this->client);
 
@@ -473,7 +586,6 @@ class WebSocketClient {
             $errorid = @socket_last_error ($this->client);
 
             $this->close();
-
 
             if ($errorid !== 0) {
 

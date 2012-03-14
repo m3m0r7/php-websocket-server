@@ -16,20 +16,26 @@ try {
     $serv->registerResource ('chat');
     $serv->registerResource ('time');
 
+    $serv->setCheckOrigin(array(
+        'localhost',
+        '127.0.0.1'
+    ));
+
     // 全イベント
+
     $serv->registerEvent('connect', function ($handle) use (&$serv) {
 
         printf("connected %s:%d\n", $handle->address, $handle->port);
 
+        printf("now \"server\" connections %d\n", $serv->getConnections());
+
+        foreach ($serv->getAllResourceConnections() as $resource => $connections) {
+            printf("now \"%s\" connections %d\n", $resource, $connections);
+        }
+
     });
 
     $serv->registerEvent('disconnect', function ($handle) use (&$serv) {
-
-        if ($handle === null) {
-
-            return;
-
-        }
 
         printf(sprintf("disconnected %s:%d\n", $handle->address, $handle->port));
 
@@ -39,12 +45,15 @@ try {
     $serv->registerEvent('connect', 'chat', function ($client) use (&$serv) {
 
         $client->sendMessage(sprintf('%s:%d', $client->address, $client->port));
+
+        $serv->broadcastMessage(sprintf('@%d', $serv->getResourceConnections($client->resource)));
         $serv->broadcastMessage(sprintf('%s:%dさんがチャットに参加しました。' . "\n", $client->address, $client->port));
 
     });
 
     $serv->registerEvent('disconnect', 'chat', function ($client) use (&$serv) {
 
+        $serv->broadcastMessage(sprintf('@%d', $serv->getResourceConnections($client->resource)));
         $serv->broadcastMessage(sprintf('%s:%dさんがチャットを終了しました。' . "\n", $client->address, $client->port));
 
     });

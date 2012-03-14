@@ -25,10 +25,18 @@
                         $('#addr').html(addr + "さん");
 
                     } else {
-                        
-                        $('#chat').append('<p class="line ' + (event.data[0] === '>' ? 'mysay' : '') + '">' + event.data + '</p>');
 
-                        $('#chat').scrollTop(99999);
+                        if (event.data[0] === '@') {
+
+                            $('#connections').text(event.data.substring(1));
+
+                        } else {
+
+                            $('#chat').append('<p class="line ' + (event.data[0] === '>' ? 'mysay' : '') + '">' + event.data + '</p>');
+
+                            $('#chat').scrollTop(99999);
+
+                        }
 
                     }
 
@@ -82,6 +90,7 @@
         <form id="form" action="javascript:void(0);" method="post">
 
             <p id="addr">取得中...</p>
+            <p>自分を含めて <span id="connections">0</span>人 参加中</p>
 
             <p><input type="text" id="message" value="" /><input type="submit" id="send" value="送信" /><input type="submit" id="close" value="切断" /></p>
 

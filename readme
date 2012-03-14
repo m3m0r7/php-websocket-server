@@ -1,24 +1,36 @@
-Rx::WebSocketについて
-
 Copyright (C) 2012  メモリー
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
 ----------------------------------------
 
-修正ログ:
+チェンジログ:
+
+2012/3/15:
+
+    Added
+        * draft-76に対応しました。 (確認はOperaのみ。)
+        * バージョン情報を記載しました(Ver 2.0.0から開始)
+        * 接続クライアントの数をリソースごととサーバー全体で管理ができるようになりました。
+        * WebSocket::setMaxServerClients ($size)を追加
+        * WebSocket::setMaxResourceClients ($resource, $size)を追加
+        * WebSocket::setMaxAllResourceClients ($size)を追加
+        * WebSocket::setDisplayExceptions ($bool)を追加
+        * WebSocket::setCheckOrigin ($bool)を追加
+        * WebSocket::getResourceConnections($resource)を追加
+        * WebSocket::getAllResourceConnections()を追加
+        * overflow-connection, failure-connectionイベントを追加しました。
+        * send-header, send-bodyイベントを削除しました。
+        * 特殊イベント server-connect, server-overflow-connection, server-failure-connectionイベントを追加しました。
+        * readmeにWebSocket::__construct, 特殊イベント, draft-76について記載しました。
+
+    Changed
+        * WebSocket::registerResource ($resource)に引数が1つ増え、WebSocket::registerResource ($resource, $maxClients = -1)となりました。
+        * WebSocket::getConnects()からWebSocket::getConnections()に名称を変更
+
+    Fixed
+        * 126サイズ以上のデータが送れなかった問題を修正
+        * [重大な問題] クライアントが接続を切った場合、正常にクライアントとの切断ができていなかった問題を修正しました。
+        * [重大な問題] クライアントがWebSocketに対応していない場合、triggerEventが無限ループしてしまう問題を修正しました。
+        * その他のバグをいろいろ修正
+
 
 2012/3/14:
 
@@ -48,7 +60,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
         * WebSocket::getClientBySocket ($client)を追加
         * WebSocket::getClientSockets ()を追加
         * WebSocket::getClientIds ()を追加
-        * WebSocket::getConnectClients ()を追加
+        * WebSocket::getConnects ()を追加
         * WebSocketClient::$idを追加
 
     Fixed
@@ -75,11 +87,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 ■ 確認済み対応WebSocketバージョン
 
-    7, 8, 13
+    draft-76, 7, 8, 13
 
 ■ 確認済みブラウザ
 
-    Firefox, GoogleChrome
+    Firefox, GoogleChrome, Opera
 
 ■ 確認済みの環境
 
@@ -95,221 +107,297 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
        A. 環境変数にphpがない可能性があります。phpのパスを通してください。環境変数の指定の仕方などは調べてください。
 
+■ draft-76について
+
+    Operaではテストができないためテキストのみでバイナリの送受信は未対応です。
+    また、WebSocketClient::sendPingやWebSocketClient::sendPong, WebSocket::broadcastPingをしてもping及びpongは送信されません。
+
 ■ メソッド解説
 
     ○ WebSocket クラス
 
-        - $pingProbability
-
-            pingを送信する確率を指定します。例えば10と指定したら、誰かが接続またはソケットに書き込んだ際に10%の確率で
-            クライアント全員に送信することになります。0を指定すると送信しなくなります。デフォルトは1です。
-
-        - $callEvent
-
-            イベントを発動するかの設定をします。falseを指定すると発動しなくなります。デフォルトはtrueです。
-
-        - triggerEvent ($eventName, $clientHandle)
-
-            $eventNameイベントを任意のタイミングで発動させます。
+        WebSocket::__construct ($ip, $port)
 
             [引数]
+                $ip - 接続を待機するホスト名
+                $port - 接続を待機するポート番号
 
-                $eventName    - イベント名を指定します。($eventNameについては後述)
-                $clientHandle - WebSocketClientインスタンスを指定します。nullを指定することも可能です。
+        Ver 1.x.x
 
-        - registerResource ($resource)
+            - $pingProbability
 
-            動作させるリソースを登録します。
+                pingを送信する確率を指定します。例えば10と指定したら、誰かが接続またはソケットに書き込んだ際に10%の確率で
+                クライアント全員に送信することになります。0を指定すると送信しなくなります。デフォルトは1です。
 
-            [引数]
+            - $callEvent
 
-                $resource - リソース名
+                イベントを発動するかの設定をします。falseを指定すると発動しなくなります。デフォルトはtrueです。
 
-        - registerEvent ($eventName, $callback)
+            - triggerEvent ($eventName, $clientHandle)
 
-            全リソースに対するトリガーイベントを登録します。
+                $eventNameイベントを任意のタイミングで発動させます。
 
-            [引数]
+                [引数]
 
-                $eventName - イベント名を指定します。(イベント名については後述)
-                $callback  - イベントが呼ばれた時のコールバック関数
+                    $eventName    - イベント名を指定します。($eventNameについては後述)
+                    $clientHandle - WebSocketClientインスタンスを指定します。nullを指定することも可能です。
 
-        - registerEvent ($eventName, $resource, $callback)
+            - WebSocket::registerResource ($resource, $maxClients = -1)
 
-            特定のリソースでアクセスしてきたクライアントにのみトリガーイベントが発動するように登録します。
+                動作させるリソースを登録します。
 
-            [引数]
+                [引数]
 
-                $eventName - イベント名を指定します。(イベント名については後述)
-                $resource - リソース名
-                $callback  - イベントが呼ばれた時のコールバック関数
+                    $resource - リソース名
+                    $maxClients - 接続可能な人数
 
-        - broadcastClose ()
+            - registerEvent ($eventName, $callback)
 
-            全クライアントにWebSocket終了のメッセージを送信します。
+                全リソースに対するトリガーイベントを登録します。
 
-        - broadcastPing ($message = 'HELLO')
+                [引数]
 
-            全クライアントにpingを送信します。
+                    $eventName - イベント名を指定します。(イベント名については後述)
+                    $callback  - イベントが呼ばれた時のコールバック関数
 
-            [引数]
+            - registerEvent ($eventName, $resource, $callback)
 
-                $message - pingで送信する内容を指定します。基本はデフォルトで問題ありません。
+                特定のリソースでアクセスしてきたクライアントにのみトリガーイベントが発動するように登録します。
 
-        - broadcastMessage ($message)
+                [引数]
 
-            全クライアントにメッセージを送信します。
+                    $eventName - イベント名を指定します。(イベント名については後述)
+                    $resource - リソース名
+                    $callback  - イベントが呼ばれた時のコールバック関数
 
-            [引数]
+            - broadcastClose ()
 
-                $message - 送信メッセージの内容
+                全クライアントにWebSocket終了のメッセージを送信します。
 
-        - broadcastBinaryMessage ($message)
+            - broadcastPing ($message = 'HELLO')
 
-            全クライアントにバイナリメッセージを送信します。
+                全クライアントにpingを送信します。
 
-            [引数]
+                [引数]
 
-                $message - 送信メッセージの内容
+                    $message - pingで送信する内容を指定します。基本はデフォルトで問題ありません。
 
-        - broadcastCommand ($message, $opcode = 0x01, $useMask = false)
+            - broadcastMessage ($message)
 
-            全クライアントにメッセージを送信します。 (broadcastMessageと違い詳細設定が可能。)
+                全クライアントにメッセージを送信します。
 
-            [引数]
+                [引数]
 
-                $message - 送信メッセージの内容
-                $opcode  - Opcode
-                $mask    - マスクを指定する場合はtrue, しない場合はfalse
+                    $message - 送信メッセージの内容
 
-        - serverRun ($callback = null)
+            - broadcastBinaryMessage ($message)
 
-            サーバーを起動させます。
+                全クライアントにバイナリメッセージを送信します。
 
-            [引数]
+                [引数]
 
-                $callback - サーバー起動時に使用するコールバック関数。第一引数に自身のWebSocketクラスが参照渡しで入ります。
+                    $message - 送信メッセージの内容
 
-        - getClientById ($id)
+            - broadcastCommand ($message, $opcode = 0x01, $useMask = false)
 
-            $idからWebSocketClientクラスを探して返します。
+                全クライアントにメッセージを送信します。 (broadcastMessageと違い詳細設定が可能。)
 
-            [引数]
+                [引数]
 
-                $id - クライアントに割り振られたid
+                    $message - 送信メッセージの内容
+                    $opcode  - Opcode
+                    $mask    - マスクを指定する場合はtrue, しない場合はfalse
 
-        - getClientBySocket ($socket)
+            - serverRun ($callback = null)
 
-            $socketからWebSocketClientクラスを探して返します。
+                サーバーを起動させます。
 
-            [引数]
+                [引数]
 
-                $socket - クライアントのソケット
+                    $callback - サーバー起動時に使用するコールバック関数。第一引数に自身のWebSocketクラスが参照渡しで入ります。
 
-        - getClientSockets ()
+            - getClientById ($id)
 
-            接続している全クライアントのソケットを配列で返します。
+                $idからWebSocketClientクラスを探して返します。
 
-        - getClientIds ()
+                [引数]
 
-            接続している全クライアントのIDを配列で返します。
+                    $id - クライアントに割り振られたid
 
-        - getConnects ()
+            - getClientBySocket ($socket)
 
-            接続している人数を返します。
+                $socketからWebSocketClientクラスを探して返します。
 
+                [引数]
+
+                    $socket - クライアントのソケット
+
+            - getClientSockets ()
+
+                接続している全クライアントのソケットを配列で返します。
+
+            - getClientIds ()
+
+                接続している全クライアントのIDを配列で返します。
+
+            - getConnections ()
+
+                接続している人数を返します。
+
+        Ver 2.x.x
+
+            - setMaxServerClients ($size)
+
+                サーバーに接続できる最大人数を設定します。$sizeが-1の場合、最大人数を制限しません。
+
+                [引数]
+
+                    $size - 接続できる最大人数
+
+            - setMaxResourceClients ($resource, $size)
+
+                特定のリソースに接続できる最大人数を設定します。$sizeが-1の場合、最大人数を制限しません。
+
+                [引数]
+
+                    $resource - リソース名
+                    $size - 接続できる最大人数
+
+            - setMaxAllResourceClients ($size)
+
+                全リソースに接続できる最大人数を設定します。$sizeが-1の場合、最大人数を制限しません。
+
+                [引数]
+
+                    $size - 接続できる最大人数
+
+            - setDisplayExceptions ($bool)
+
+                例外が投げられたとき、コンソールに表示するかの設定をします。
+
+                [引数]
+
+                    $bool - true/false
+
+            - setCheckOrigin ($list)
+
+                クライアントから送られてきたOriginが正しいかをチェックします。
+                $listにはチェックしたいOriginを入力します。
+                falseを指定した場合、チェックは行われません。デフォルトはfalseです。
+
+                [引数]
+
+                    $list - チェックしたいOriginを配列または1つであれば、文字列。したくない場合はfalseを設定します。
+
+            - getResourceConnections($resource)
+
+                特定のリソースにアクセスしている人数を取得します。
+
+                [引数]
+
+                    $resource - リソース名
+
+            - getAllResourceConnections
+
+                全リソースにアクセスしている人数をarray(リソース名1 => 接続人数, リソース名2 => 接続人数, ...)のような形の配列で返します。
 
     ○ WebSocketClient クラス
 
-        - $id
+        Ver 1.x.x
 
-            割り振られたID
+            - $id
 
-        - $address
+                割り振られたID
 
-            クライアントのIPアドレス
+            - $address
 
-        - $port
+                クライアントのIPアドレス
 
-            クライアントのポート
+            - $port
 
-        - $timestamp
+                クライアントのポート
 
-            接続してきた日時をUNIXタイムスタンプで格納します。
+            - $timestamp
 
-        - $resource
+                接続してきた日時をUNIXタイムスタンプで格納します。
 
-            接続してきたリソース名
+            - $resource
 
-        - getMessage ()
+                接続してきたリソース名
 
-            クライアントから送信されたメッセージを取得します。
-            WebSocketから使用されるもので、一般的には使用されません。
+            - getMessage ()
 
-        - sendClose ()
+                クライアントから送信されたメッセージを取得します。
+                WebSocketから使用されるもので、一般的には使用されません。
 
-            クライアントとの切断を形式的に行います。
+            - sendClose ()
 
-        - sendPing ($ping = 'HELLO')
+                クライアントとの切断を形式的に行います。
 
-            pingを送信します。
+            - sendPing ($ping = 'HELLO')
 
-            [引数]
+                pingを送信します。
 
-                $message - pingで送信する内容を指定します。基本はデフォルトで問題ありません。
+                [引数]
 
-        - sendPong ($pong)
+                    $message - pingで送信する内容を指定します。基本はデフォルトで問題ありません。
 
-            pongを送信します。
-            getMessage()から使用されるもので、一般的には使用されません。
+            - sendPong ($pong)
 
-            [引数]
+                pongを送信します。
+                getMessage()から使用されるもので、一般的には使用されません。
 
-                $ping - pongで送信する内容を指定します。
+                [引数]
 
-        - sendMessage ($message)
+                    $ping - pongで送信する内容を指定します。
 
-            メッセージを送信します。
+            - sendMessage ($message)
 
-            [引数]
+                メッセージを送信します。
 
-                $message - 送信メッセージの内容
+                [引数]
 
-        - sendBinaryMessage ($message)
+                    $message - 送信メッセージの内容
 
-            バイナリメッセージを送信します。
+            - sendBinaryMessage ($message)
 
-            [引数]
+                バイナリメッセージを送信します。
 
-                $message - 送信メッセージの内容
+                [引数]
 
-        - sendCommand ($message, $opcode = 0x01, $useMask = false)
+                    $message - 送信メッセージの内容
 
-            メッセージを送信します。 (sendMessageと違い詳細設定が可能。)
+            - sendCommand ($message, $opcode = 0x01, $useMask = false)
 
-            [引数]
+                メッセージを送信します。 (sendMessageと違い詳細設定が可能。)
 
-                $message - 送信メッセージの内容
-                $opcode  - Opcode
-                $mask    - マスクを指定する場合はtrue, しない場合はfalse
+                [引数]
 
-        - read ($size = 0xffff)
+                    $message - 送信メッセージの内容
+                    $opcode  - Opcode
+                    $mask    - マスクを指定する場合はtrue, しない場合はfalse
 
-            バッファを読みこむためのものです。
-            getMessage()から使用されるもので、一般的には使用されません。
+            - read ($size = 0xffff)
 
-            [引数]
+                バッファを読みこむためのものです。
+                getMessage()から使用されるもので、一般的には使用されません。
 
-                $size = 読み込むサイズ
+                [引数]
 
-        - write ($body)
+                    $size = 読み込むサイズ
 
-            バッファを書きこむためのものです。
-            getMessage()から使用されるもので、一般的には使用されません。
+            - write ($body)
 
-            [引数]
+                バッファを書きこむためのものです。
+                getMessage()から使用されるもので、一般的には使用されません。
 
-                $body - 書き込む内容
+                [引数]
+
+                    $body - 書き込む内容
+
+        Ver 2.x.x
+
+            なし
 
 ■ broadcast系のメソッドについて
 
@@ -351,6 +439,36 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 ■ イベント名について
 
     ○ 登録されている使用可能なイベント
+
+        - overflow-connection
+        - server-overflow-connection (特殊イベント)
+
+            クライアントが接続してきた際に、サーバーに接続しているクライアントが設定した接続許可数より多くなる時に発動するイベントです。
+
+            [コールバック関数が受け付ける引数 (overflow-connectionのみ)]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+
+
+        - failure-connection
+        - server-failure-connection (特殊イベント)
+
+            サーバーがなんらかの事情（Originチェックが失敗したなど）でクライアントのアクセスを拒否した場合に
+            発動するイベントです。
+
+            [コールバック関数が受け付ける引数 (failure-connectionのみ)]
+
+                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
+
+        - server-connect (特殊イベント)
+
+            クライアントが接続時に発動するイベントです。
+            connectイベントとの違いは、ハンドシェイクを行う前に実行される点です。
+            よって、WebSocketClientクラスは生成されないため、引数で受け取ることができません。
+
+            [コールバック関数が受け付ける引数]
+
+                なし。
 
         - connect
 
@@ -397,27 +515,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
                 $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
                 $pong         - 送信したpong
-
-
-        - send-header
-
-            メッセージヘッダーの送信後に発動するイベントです。
-
-            [コールバック関数が受け付ける引数]
-
-                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
-                $header       - 送信したヘッダー
-
-
-        - send-body
-
-            メッセージボディの送信後に発動するイベントです。
-
-            [コールバック関数が受け付ける引数]
-
-                $clientHandle - WebSocketClientクラスでインスタンスされたものを参照渡しで引き渡します。
-                $body         - 送信した本文
-
 
         - send-close
 
@@ -529,14 +626,21 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
     ○ 発動の優先度
 
+        ※ (/が含まれるものは順が不確定または、どちらかという意味をさします。)
 
-                                                             リソース名あり
+                                                                 接続
                                                                    |
-                                                             received/send
+                                                        server-overflow-connection
                                                                    |
-                                                             リソース名なし
+                                              server-failure-connection/failure-connection
                                                                    |
-                                                             received/send
+                                                          overflow-connection
+
+                                                           イベントトリガー発動
+                                                                   |
+                                                       リソース名ありのreceived/send
+                                                                   |
+                                                       リソース名なしのreceived/send
 
 
                                                               [received]
@@ -552,15 +656,16 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
                                                                 [send]
 
-                                                              send-header
-                                                                   |
-                                                               send-body
-                                                                   |
                                                                  send
                                                                    |
                                 +------------------------+---------+----------------+------------------+------------------+
                                 |                        |                          |                  |                  |
                       send-message-binary        send-message-plain            send-close          send-ping          send-pong
+
+    ○ 特殊イベントについて
+
+        特殊イベントとは、リソース名を持てない特別なイベントの事をさします。
+        基本的にサーバー側の動作を対象としています。
 
 
 ■ 基本的な書式
