@@ -1,6 +1,5 @@
 <?php
 
-
 class WebSocketClient {
 
     public $address;
@@ -103,12 +102,21 @@ class WebSocketClient {
 
             self::$server->triggerEvent ('received', $this, $message);
 
-            if (empty($message) === true) {
+            if (empty($message) === true || strlen($message) < 6) {
+
                 return false;
 
             }
 
             $fin = (ord($message[$ptr]) >> 7);
+
+            if ($fin < 0 || $fin > 1) {
+
+                $this->close();
+
+                return false;
+
+            }
 
             // $rsv = array(0, 0, 0);
 
@@ -118,7 +126,24 @@ class WebSocketClient {
 
             $maskFlag = (ord($message[$ptr]) >> 7) & 0xff;
 
+            // サーバーは必ず受信するデータはマスクがセットされている。
+            if ($maskFlag !== 1) {
+
+                $this->close();
+
+                return false;
+
+            }
+
             $type = ((ord($message[$ptr]) << 1) & 0xff) >> 1;
+
+            if ($type < 0 || $type > 127) {
+
+                $this->close();
+
+                return false;
+
+            }
 
             $ptr++;
 
@@ -192,19 +217,6 @@ class WebSocketClient {
 
             }
 
-            if (strlen($string) > 0) {
-
-                $detect = mb_detect_encoding($string);
-
-                if ($detect !== 'UTF-8') {
-
-                    // UTF-8じゃないとか…
-                    $this->close();
-
-                }
-
-            }
-
             switch ($opcode) {
 
                 case 0x00:
@@ -214,6 +226,17 @@ class WebSocketClient {
                 break;
 
                 case 0x01:
+
+                    $detect = mb_detect_encoding($string);
+
+                    if ($detect !== 'UTF-8') {
+
+                        // UTF-8じゃないとか…
+                        $this->close();
+
+                        return false;
+
+                    }
 
                     // テキスト (UTF-8)
 
@@ -267,13 +290,22 @@ class WebSocketClient {
 
                 break;
 
+                default:
+
+                    // 不明なOpcodeのユーザーは攻撃の可能性があるのでセッションを切る。
+
+                    $this->close();
+
+                    return false;
+
+
+                break;
+
             }
 
         }
 
         return $string;
-
-        return false;
 
     }
 
@@ -308,6 +340,14 @@ class WebSocketClient {
     }
 
     public function sendMessage ($message) {
+
+        $detect = mb_detect_encoding($message);
+
+        if ($detect !== 'UTF-8') {
+
+            $message = mb_convert_encoding($message, 'UTF-8', $detect === false ? 'SJIS' : $detect);
+
+        }
 
         $this->sendCommand ($message, 0x01, true);
 
@@ -368,14 +408,6 @@ class WebSocketClient {
                 $body = '';
 
             break;
-
-        }
-
-        $detect = mb_detect_encoding($message);
-
-        if ($detect !== 'UTF-8') {
-
-            $message = mb_convert_encoding($message, 'UTF-8', $detect === false ? 'SJIS' : $detect);
 
         }
 
