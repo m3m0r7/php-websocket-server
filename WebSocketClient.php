@@ -12,6 +12,8 @@ class WebSocketClient {
     public $id = -1;
 
     public $resource = null;
+    public $resourceQuery = null;
+
     public $version = -1;
 
     private $client = null;
@@ -20,7 +22,7 @@ class WebSocketClient {
 
     public static function setServer (&$server) {
 
-        if (($server instanceof WebSocket) === false) {
+        if (($server instanceof WebSocketServer) === false) {
 
             throw new WebSocketException('Resource.NullPointer.Exception');
 
@@ -32,7 +34,7 @@ class WebSocketClient {
 
     public function __construct ($clientHandle) {
 
-        if (($peer = @socket_getpeername($clientHandle, $address, $port)) === false) {
+        if (($peer = @stream_socket_get_name($clientHandle, true)) === false) {
 
             $this->close();
 
@@ -40,10 +42,9 @@ class WebSocketClient {
 
         }
 
-        $this->client = $clientHandle;
+        list ($this->address, $this->port) = explode(':', $peer);
 
-        $this->address = $address;
-        $this->port = $port;
+        $this->client = $clientHandle;
 
         $this->timestamp = time();
 
@@ -59,13 +60,13 @@ class WebSocketClient {
 
             self::$server->amountResourceConnections ($this->resource, -1);
 
-            @socket_close($this->client);
+            @stream_socket_shutdown($this->client, STREAM_SHUT_RDWR);
 
             self::$server->triggerEvent ('disconnect', $trigger);
 
         } else {
 
-            @socket_close($this->client);
+            @stream_socket_shutdown($this->client, STREAM_SHUT_RDWR);
 
         }
 
@@ -251,18 +252,18 @@ class WebSocketClient {
 
                         // テキスト (UTF-8)
 
-                        self::$server->triggerEvent ('received-message', $this, $string, false);
+                        self::$server->triggerEvent ('receivedMessage', $this, $string, false);
 
-                        self::$server->triggerEvent ('received-message-plain', $this, $string);
+                        self::$server->triggerEvent ('receivedMessagePlain', $this, $string);
 
                     break;
                     case 0x02:
 
                         // バイナリ
 
-                        self::$server->triggerEvent ('received-message', $this, $string, true);
+                        self::$server->triggerEvent ('receivedMessage', $this, $string, true);
 
-                        self::$server->triggerEvent ('received-message-binary', $this, $string);
+                        self::$server->triggerEvent ('receivedMessageBinary', $this, $string);
 
                     break;
 
@@ -270,7 +271,7 @@ class WebSocketClient {
 
                         // セッションクローズ
 
-                        self::$server->triggerEvent ('received-close', $this, $string, true);
+                        self::$server->triggerEvent ('receivedClose', $this, $string, true);
 
                         $this->close();
 
@@ -282,7 +283,7 @@ class WebSocketClient {
 
                         // from ping
 
-                        self::$server->triggerEvent ('received-ping', $this, $string);
+                        self::$server->triggerEvent ('receivedPing', $this, $string);
 
                         $this->sendPong($string);
 
@@ -295,7 +296,7 @@ class WebSocketClient {
 
                         // from pong
 
-                        self::$server->triggerEvent ('received-pong', $this, $string);
+                        self::$server->triggerEvent ('receivedPong', $this, $string);
 
                         return false;
 
@@ -341,26 +342,26 @@ class WebSocketClient {
 
                     }
 
-                    self::$server->triggerEvent ('received-message', $this, $string, false);
+                    self::$server->triggerEvent ('receivedMessage', $this, $string, false);
 
-                    self::$server->triggerEvent ('received-message-plain', $this, $string);
+                    self::$server->triggerEvent ('receivedMessagePlain', $this, $string);
 
                     return $string;
 
-                } else if ($frameType >= 0x80 && $frameType <= 0xfe) {
+                } else if ($frameType >= 0x80 && $frameType <= 0xFE) {
 
                     // binary frame is no supported...
 
-                    self::$server->triggerEvent ('received-message', $this, $string, false);
+                    self::$server->triggerEvent ('receivedMessage', $this, $string, false);
 
-                    self::$server->triggerEvent ('received-message-binary', $this, $string);
+                    self::$server->triggerEvent ('receivedMessageBinary', $this, $string);
 
                     return false;
 
-                } else if ($frameType === 0xff && ord($message[1]) === 0x00) {
+                } else if ($frameType === 0xFF && ord($message[1]) === 0x00) {
 
                     // send close
-                    self::$server->triggerEvent ('received-close', $this, $string, true);
+                    self::$server->triggerEvent ('receivedClose', $this, $string, true);
 
                     // close handshake
                     $this->sendClose();
@@ -393,7 +394,7 @@ class WebSocketClient {
 
         $this->sendCommand ('', 0x08);
 
-        self::$server->triggerEvent ('send-close', $this);
+        self::$server->triggerEvent ('sendClose', $this);
 
         $this->close();
 
@@ -405,7 +406,7 @@ class WebSocketClient {
 
         $receive = $this->getMessage();
 
-        self::$server->triggerEvent ('send-ping', $this, $receive);
+        self::$server->triggerEvent ('sendPing', $this, $receive);
 
         return $ping === $receive;
 
@@ -415,7 +416,7 @@ class WebSocketClient {
 
         $this->sendCommand ($pong, 0x0A);
 
-        self::$server->triggerEvent ('send-pong', $this, $pong);
+        self::$server->triggerEvent ('sendPong', $this, $pong);
 
     }
 
@@ -431,7 +432,7 @@ class WebSocketClient {
 
         $this->sendCommand ($message, 0x01, true);
 
-        self::$server->triggerEvent ('send-message-plain', $this, $message);
+        self::$server->triggerEvent ('sendMessagePlain', $this, $message);
 
     }
 
@@ -439,7 +440,7 @@ class WebSocketClient {
 
         $this->sendCommand ($message, 0x02);
 
-        self::$server->triggerEvent ('send-message-binary', $this, $message);
+        self::$server->triggerEvent ('sendMessageBinary', $this, $message);
 
     }
 
@@ -478,10 +479,10 @@ class WebSocketClient {
 
             if ($useMask === true) {
 
-                $body .= $mask[0] = chr(mt_rand(0, 255));
-                $body .= $mask[1] = chr(mt_rand(0, 255));
-                $body .= $mask[2] = chr(mt_rand(0, 255));
-                $body .= $mask[3] = chr(mt_rand(0, 255));
+                $body .= $mask[0] = chr(mt_rand(0, 0xFF));
+                $body .= $mask[1] = chr(mt_rand(0, 0xFF));
+                $body .= $mask[2] = chr(mt_rand(0, 0xFF));
+                $body .= $mask[3] = chr(mt_rand(0, 0xFF));
 
                 $body .= self::packString ($message, $size, $mask);
 
@@ -554,22 +555,49 @@ class WebSocketClient {
 
         $data = '';
 
-        if (($data = @socket_read($this->client, $size)) === false) {
+        if (self::$server->isSecure () === true) {
 
-            $errorid = @socket_last_error ($this->client);
+            // wtf...?
 
-            $this->close();
+            $data = @fread($this->client, $size);
 
-            if ($errorid !== 0) {
+            if ($data !== false) {
 
-                throw new WebSocketException('Socket.ReadBuffer.Exception -> ' . socket_strerror($errorid), $errorid);
+                if (strlen($data) === 1) {
+
+                    $data .= $check = @fread($this->client, $size);
+
+                    if ($check !== false) {
+
+                        return $data;
+
+                    }
+
+                }
 
             }
 
-            return '';
+        } else {
+
+            if (($data = @fread($this->client, $size)) !== false) {
+
+                return $data;
+
+            }
+
         }
 
-        return $data;
+        $errorid = @socket_last_error ($this->client);
+
+        $this->close();
+
+        if ($errorid !== 0) {
+
+            throw new WebSocketException('Socket.ReadBuffer.Exception -> ' . socket_strerror($errorid), $errorid);
+
+        }
+
+        return '';
 
     }
 
@@ -581,7 +609,7 @@ class WebSocketClient {
 
         }
 
-        if (@socket_write($this->client, $body) === false) {
+        if (@fwrite($this->client, $body, strlen($body)) === false) {
 
             $errorid = @socket_last_error ($this->client);
 

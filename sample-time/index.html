@@ -7,7 +7,7 @@
         <script>
 
             if (typeof WebSocket === 'undefined') {
-                var ws = new MozWebSocket("ws://" + location.host + ":8484/time");
+                var ws = new MozWebSocket("ws://" + location.host + ":8484/time?a=b");
             } else {
                 var ws = new WebSocket("ws://" + location.host + ":8484/time");
             }
@@ -21,15 +21,9 @@
 
                     $('#time').text("現在の時刻：" + date.toString());
 
+
                 }
 
-                ws.onopen = function () {
-
-                };
-
-                ws.onerror = function (event) {
-
-                };
 
             });
         </script>

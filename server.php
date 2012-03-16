@@ -1,8 +1,10 @@
 <?php
 
 // include 'UPnP.php';
-include 'WebSocket.php';
+include 'WebSocketServer.php';
 include 'WebSocketClient.php';
+include 'WebSocketEvent.php';
+include 'IWebSocketEvent.php';
 include 'WebSocketException.php';
 
 try {
@@ -11,7 +13,8 @@ try {
     mb_http_input('UTF-8');
     mb_http_output('UTF-8');
 
-    $serv = new WebSocket('0.0.0.0', 8484);
+    $serv = new WebSocketServer('0.0.0.0', 8484);
+    $serv->setDisplayLog (true);
 
     $serv->registerResource ('chat');
     $serv->registerResource ('time');
@@ -58,7 +61,7 @@ try {
 
     });
 
-    $serv->registerEvent('received-message', 'chat', function ($client, $message) use (&$serv) {
+    $serv->registerEvent('receivedMessage', 'chat', function ($client, $message) use (&$serv) {
 
         $serv->broadcastMessage(array(
             $client,
@@ -68,17 +71,23 @@ try {
 
     });
 
-    // 時計用イベント
-    $serv->registerEvent('connect', 'time', function ($client) use (&$serv) {
+    // タイムイベントをクラスで定義する
+    class TimeEvent extends WebSocketEvent implements IWebSocketEvent {
 
-        $client->sendMessage((string) time());
+        public function connect () {
 
-        printf("> Sent a time to %s:%d\n", $client->address, $client->port);
+            $this->client->sendMessage((string) time());
 
-        // 終了させる。
-        $client->sendClose();
+            printf("> Sent a time to %s:%d\n", $this->client->address, $this->client->port);
 
-    });
+            // 終了させる。
+            $this->client->sendClose();
+
+        }
+
+    }
+
+    $serv->registerEvent(new TimeEvent(), 'time');
 
     $serv->serverRun();
 

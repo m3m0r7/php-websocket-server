@@ -1,9 +1,17 @@
 <?php
 
-class WebSocket {
+class WebSocketServer {
 
-    const VERSION = '2.0.0';
+    const VERSION = '2.0.1';
     const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+    const LOG_INFO = 0;
+    const LOG_WARNING = 1;
+    const LOG_ERROR = 2;
+    const LOG_NOTICE = 3;
+    const LOG_EXCEPTION = 4;
+    const LOG_WAIT = 5;
+    const LOG_SUCCESS = 6;
 
     public $callEvent = true;
 
@@ -17,79 +25,74 @@ class WebSocket {
 
     private $maxServerClients = -1;
 
+    private $listenInterval = 2000000;
+
+    private $displayLog = true;
+
     private $displayExceptions = false;
 
     private $checkOrigin = false;
 
     private $port = 0;
 
+    private $secure = false;
+
     private $address = '0.0.0.0';
 
     private $initEvents = array(
 
-        'overflow-connection' => false,
-        'failure-connection' => false,
+        'overflowConnection' => false,
+        'failureConnection' => false,
 
         'connect' => false,
         'disconnect' => false,
 
         'send' => false,
 
-        'send-ping' => false,
-        'send-pong' => false,
-        'send-close' => false,
+        'sendPing' => false,
+        'sendPong' => false,
+        'sendClose' => false,
 
-        'send-message' => false,
-        'send-message-plain' => false,
-        'send-message-binary' => false,
+        'sendMessage' => false,
+        'sendMessagePlain' => false,
+        'sendMessageBinary' => false,
 
         'received' => false,
 
-        'received-ping' => false,
-        'received-pong' => false,
-        'received-close' => false,
+        'receivedPing' => false,
+        'receivedPong' => false,
+        'receivedClose' => false,
 
-        'received-message' => false,
-        'received-message-plain' => false,
-        'received-message-binary' => false
+        'receivedMessage' => false,
+        'receivedMessagePlain' => false,
+        'receivedMessageBinary' => false,
 
+        '__event_type__' => 0,
+        '__class_handle__' => null
     );
 
     private $handle = null;
 
-    public function __construct ($ip, $port) {
+    public function __construct ($ip, $port, $secure = false) {
 
-        $this->handle = @socket_create (AF_INET, SOCK_STREAM, SOL_TCP);
+        ob_implicit_flush (true);
 
-        $this->port = $port;
+        $this->secure = (bool) $secure;
+
+        $this->port = (int) $port;
         $this->address = $ip;
-
-        if (@socket_bind($this->handle, $ip, $port) === false) {
-
-            throw new WebSocketException('Socket.Bind.Exception');
-
-        }
-
-        if (@socket_listen($this->handle) === false) {
-
-            throw new WebSocketException('Socket.Listen.Exception');
-
-        }
 
         // イベントハンドラの初期化
 
         $this->events = $this->initEvents;
 
         // サーバーイベントハンドラ
-        $this->events['server-connect'] = false;
-        $this->events['server-overflow-connection'] = false;
-        $this->events['server-failure-connection'] = false;
+        $this->events['serverConnect'] = false;
+        $this->events['serverOverflowConnection'] = false;
+        $this->events['serverFailureConnection'] = false;
 
         // リソースハンドラ
         $this->events['__resource__'] = array();
-
-        // 登録しておく。
-        $this->registerResource('/');
 
     }
 
@@ -97,29 +100,70 @@ class WebSocket {
 
         static $_s = 7; // strlen('server-')
 
-        if ($this->callEvent === false) {
+        $ip = '0.0.0.0';
+        $port = 0;
 
-            return;
+        if (($clientHandle instanceof WebSocketClient) === true && $eventName === 'disconnect' && $this->displayLog === true) {
 
-        }
-
-        if (($clientHandle instanceof WebSocketClient) === true && isset($this->events['__resource__'][$clientHandle->resource]) === true && $this->events['__resource__'][$clientHandle->resource][$eventName] !== false) {
-
-            call_user_func_array($this->events['__resource__'][$clientHandle->resource][$eventName], array_slice(func_get_args(), 1));
+            $ip = $clientHandle->address;
+            $port = $clientHandle->port;
 
         }
 
-        if (isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
+        if ($this->callEvent === true) {
 
-            if (($clientHandle instanceof WebSocketClient) === true && $clientHandle->hasSocket() === true) {
+            if (($clientHandle instanceof WebSocketClient) === true && isset($this->events['__resource__'][$clientHandle->resource]) === true && $this->events['__resource__'][$clientHandle->resource][$eventName] !== false) {
 
-                call_user_func_array($this->events[$eventName], array_slice(func_get_args(), 1));
+                if ($this->events['__resource__'][$clientHandle->resource]['__event_type__'] === 1) {
 
-            } else if (substr($eventName, 0, $_s) === 'server-') {
+                    $this->events['__resource__'][$clientHandle->resource]['__class_handle__']->setClient($clientHandle);
 
-                call_user_func($this->events[$eventName]);
+                    $this->log('Call client class event "%s::%s" on uri "%s"', self::LOG_INFO, get_class($this->events['__resource__'][$clientHandle->resource]['__class_handle__']), $eventName, $clientHandle->resource);
+
+                } else {
+
+                    $this->log('Call client event "%s" on uri "%s"', self::LOG_INFO, $eventName, $clientHandle->resource);
+
+                }
+
+                call_user_func_array($this->events['__resource__'][$clientHandle->resource][$eventName], array_slice(func_get_args(), 1));
 
             }
+
+
+            if (isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
+
+                if (($clientHandle instanceof WebSocketClient) === true && $clientHandle->hasSocket() === true) {
+
+                    if ($this->events['__event_type__'] === 1) {
+
+                        $this->events['__class_handle__']->setClient($clientHandle);
+
+                        $this->log('Call client class event "%s::%s" on uri "%s"', self::LOG_INFO, get_class($this->events['__class_handle__']), $eventName, $clientHandle->resource);
+
+                    } else {
+
+                        $this->log('Call client event "%s"', self::LOG_INFO, $eventName, $clientHandle->resource);
+
+                    }
+
+                    call_user_func_array($this->events[$eventName], array_slice(func_get_args(), 1));
+
+                } else if (substr($eventName, 0, $_s) === 'server-') {
+
+                    $this->log('Call server event "%s"', self::LOG_INFO, $eventName);
+
+                    call_user_func($this->events[$eventName]);
+
+                }
+
+            }
+
+        }
+
+        if (($clientHandle instanceof WebSocketClient) === true && $eventName === 'disconnect') {
+
+            $this->log('Finished session %s:%d', self::LOG_INFO, $ip, $port);
 
         }
 
@@ -137,15 +181,11 @@ class WebSocket {
         $this->maxResourceClients[$resource]['size'] = (int) $maxClients;
         $this->maxResourceClients[$resource]['connections'] = 0;
 
+        $this->log('Regist uri resource "%s"', self::LOG_INFO, $resource);
+
     }
 
-    public function registerEvent ($eventName, $callbackORresource, $resourceORcallback = null) {
-
-        if (isset($this->events[$eventName]) === false) {
-
-            throw new WebSocketException('Register.Event.Name.Exception');
-
-        }
+    public function registerEvent ($eventName, $callbackORresource = null, $resourceORcallback = null) {
 
         $resource = null;
         $callback = $callbackORresource;
@@ -158,30 +198,99 @@ class WebSocket {
 
         }
 
-        if (is_callable($callback) === false) {
+        if (($parentClass = get_parent_class($eventName)) !== false) {
 
-            throw new WebSocketException('Register.Event.Callback.Exception');
+            if ($parentClass === 'WebSocketEvent') {
 
-        }
+                $resource = $callbackORresource;
 
-        if (is_string($resource) === true) {
+                // parse to array events...
+                $eventName->setServer($this);
 
-            if ($resource === '__resource__' || isset($this->events['__resource__'][$resource]) === false || isset($this->events['__resource__'][$resource][$eventName]) === false) {
+                if (is_string($resource) === true) {
 
-                throw new WebSocketException('Register.Event.Resource.Exception');
+                    if ($resource === '__resource__' || isset($this->events['__resource__'][$resource]) === false) {
+
+                        throw new WebSocketException('Register.Event.Resource.Exception');
+
+                    }
+
+                    foreach ($this->initEvents as $name => $init) {
+
+                        $this->events['__resource__'][$resource][$name] = array(
+                            $eventName,
+                            $name
+                        );
+
+                    }
+
+                    $this->events['__resource__'][$resource]['__event_type__'] = 1;
+                    $this->events['__resource__'][$resource]['__class_handle__'] = &$eventName;
+
+                    $this->log('Regist event class "%s"' . ($resource !== null ? ' on uri resource "' . $resource . '"' : ''), self::LOG_INFO, get_class($eventName));
+
+                } else {
+
+                    foreach ($this->initEvents as $name => $init) {
+
+                        $this->events[$name] = array(
+                            $eventName,
+                            $name
+                        );
+
+                    }
+
+                    $this->events['__event_type__'] = 1;
+                    $this->events['__class_handle__'] = &$eventName;
+
+                }
+
+            } else {
+
+                throw new WebSocketException('Register.Event.Class.Exception');
 
             }
-            $this->events['__resource__'][$resource][$eventName] = $callback;
 
         } else {
 
-            $this->events[$eventName] = $callback;
+            if (is_callable($callback) === false) {
+
+                throw new WebSocketException('Register.Event.Callback.Exception');
+
+            }
+
+            if (isset($this->events[$eventName]) === false) {
+
+                throw new WebSocketException('Register.Event.Name.Exception');
+
+            }
+
+            if (is_string($resource) === true) {
+
+                if ($resource === '__resource__' || isset($this->events['__resource__'][$resource]) === false || isset($this->events['__resource__'][$resource][$eventName]) === false || $eventName === '__event_type__' || $eventName === '__class_handle__') {
+
+                    throw new WebSocketException('Register.Event.Resource.Exception');
+
+                }
+
+                $this->events['__resource__'][$resource][$eventName] = $callback;
+
+            } else {
+
+                $this->events[$eventName] = $callback;
+
+
+            }
+
+            $this->log('Regist event "%s"' . ($resource !== null ? ' on uri resource "' . $resource . '"' : ''), self::LOG_INFO, $eventName);
 
         }
 
     }
 
     public function broadcastClose () {
+
+        $this->log('Broadcasting Close...', self::LOG_WAIT);
 
         foreach ($this->clients as $client) {
 
@@ -195,9 +304,13 @@ class WebSocket {
 
         }
 
+        $this->log('Okay', self::LOG_SUCCESS);
+
     }
 
     public function broadcastPing ($message = 'HELLO') {
+
+        $this->log('Broadcasting Ping ...', self::LOG_WAIT);
 
         $this->broadcastCommand ($message, 0x09);
 
@@ -205,11 +318,15 @@ class WebSocket {
 
     public function broadcastMessage ($message) {
 
+        $this->log('Broadcasting Message ...', self::LOG_WAIT);
+
         $this->broadcastCommand ($message);
 
     }
 
     public function broadcastBinaryMessage ($message) {
+
+        $this->log('Broadcasting Binary Message ...', self::LOG_WAIT);
 
         $this->broadcastCommand ($message, 0x02);
 
@@ -271,21 +388,89 @@ class WebSocket {
 
             } catch (WebSocketException $e) {
 
-                printf("%s\n", $e->getMessage());
+                $this->log($e->getMessage(), self::LOG_EXCEPTION);
 
             }
 
         }
 
+        $this->log('Okay', self::LOG_SUCCESS);
+
     }
 
     public function serverRun ($callback = null) {
 
+        $context = stream_context_create();
+
+        if ($this->secure === true) {
+
+            $this->log('Creation SSL Key', self::LOG_WAIT, $this->address, $this->port);
+
+            $configurePath = array(
+                'config' => 'ssl/openssl.cnf',
+                'private_key_bits' => 2048,
+                'digest_alg' => 'sha512',
+                'x509_extensions' => 'v3_ca',
+                'req_extensions'   => 'v3_req',
+                'private_key_type' => OPENSSL_KEYTYPE_RSA,
+                'encrypt_key' => true
+            );
+
+            if (function_exists('openssl_pkey_new') === false) {
+
+                $this->log('Creation SSL Key Error. May you not openssl compiled with php.', self::LOG_ERROR);
+
+                exit();
+
+            }
+
+            $sslHandle = openssl_pkey_new($configurePath);
+
+            $passphrase = md5(uniqid(time()));
+
+            $csrNew = openssl_csr_new (array(
+                'countryName' => 'JP',
+                'stateOrProvinceName' => 'none',
+                'localityName' => 'none',
+                'organizationName' => 'none',
+                'organizationalUnitName' => 'none',
+                'commonName' => 'localhost',
+                'emailAddress' => 'postmaster@localhost'
+            ), $sslHandle, $configurePath);
+
+            $cert = openssl_csr_sign($csrNew, null, $sslHandle, 365, $configurePath);
+
+            openssl_x509_export($cert, $x509);
+
+            openssl_pkey_export($sslHandle, $pkey, $passphrase, $configurePath);
+
+            file_put_contents('ssl/wss.pem', $x509 . $pkey);
+
+            stream_context_set_option($context, 'ssl', 'local_cert', 'ssl/wss.pem');
+            stream_context_set_option($context, 'ssl', 'passphrase', $passphrase);
+            stream_context_set_option($context, 'ssl', 'allow_self_signed', true);
+            stream_context_set_option($context, 'ssl', 'verify_peer', false);
+
+            $this->log('Okay', self::LOG_SUCCESS);
+
+        }
+
+        $this->handle = @stream_socket_server(($this->secure === true ? (in_array('sslv3', stream_get_transports()) === true ? 'sslv3' : 'ssl') : 'tcp') . '://' . $this->address . ':' . $this->port, $errno, $err, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
+
+        if ($this->handle === false) {
+
+            throw new WebSocketException ('Socket.Create.Exception');
+
+        }
+
+        if (isset($this->maxResourceClients['/']) === false) {
+
+            // / が登録されていない場合登録する。
+            $this->registerResource('/');
+
+        }
+
         $dummy = null;
-
-        ob_implicit_flush (true);
-
-        socket_set_option($this->handle, SOL_SOCKET, SO_REUSEADDR, 1);
 
         WebSocketClient::setServer ($this);
 
@@ -309,11 +494,23 @@ class WebSocket {
 
         }
 
+        gc_enable();
+
+        $this->log('Server running on PHP %s', self::LOG_INFO, PHP_VERSION);
+
         while (true) {
 
             $sockets = array_merge(array($this->handle), $this->getClientSockets());
 
-            @socket_select($sockets, $dummy, $dummy, null);
+            if ($this->listenInterval > 0) {
+
+                @stream_select ($sockets, $dummy, $dummy, 0, $this->listenInterval);
+
+            } else {
+
+                @stream_select ($sockets, $dummy, $dummy, null);
+
+            }
 
             foreach ($sockets as $handle) {
 
@@ -321,13 +518,19 @@ class WebSocket {
 
                     if ($handle === $this->handle) {
 
-                        $this->triggerEvent ('server-connect', $dummy);
+                        $this->triggerEvent ('serverConnect', $dummy);
 
                         if ($this->maxServerClients > -1 && (sizeof($this->clients) + 1) > $this->maxServerClients) {
 
                             $this->sendHandShakeError (null, 503);
 
                         } else {
+
+                            if ($this->pingProbability > 0 && mt_rand(1, 100) <= $this->pingProbability) {
+
+                                $this->broadcastPing();
+
+                            }
 
                             $this->registerClient();
 
@@ -347,17 +550,9 @@ class WebSocket {
 
                 } catch (WebSocketException $e) {
 
-                    if ($this->displayExceptions === true) {
-                        printf("%s\n", $e->getMessage());
-                    }
+                    $this->log($e->getMessage(), self::LOG_EXCEPTION);
 
                 }
-
-            }
-
-            if ($this->pingProbability > 0 && mt_rand(1, 100) <= $this->pingProbability) {
-
-                $this->broadcastPing();
 
             }
 
@@ -367,16 +562,15 @@ class WebSocket {
 
     private function registerClient () {
 
-        if (($client = @socket_accept ($this->handle)) !== false) {
-
-            socket_set_option($client, SOL_SOCKET, SO_REUSEADDR, 1);
+        if (($client = @stream_socket_accept ($this->handle)) !== false) {
 
             $clientHandle = new WebSocketClient($client);
+
+            $this->log('Start session %s:%d', self::LOG_INFO, $clientHandle->address, $clientHandle->port);
 
             $header = array();
 
             $state = false;
-
             $request = $clientHandle->read();
 
             foreach(explode("\n", trim($request)) as $line) {
@@ -405,9 +599,27 @@ class WebSocket {
 
             }
 
-            $resource = trim($match[1]);
+            $resource = parse_url($match[1]);
 
-            $clientHandle->resource = $resource === '/' ? '/' : substr($resource, 1);
+            if (isset($resource['path']) === false) {
+
+                $this->sendHandShakeError ($clientHandle, 400);
+
+                return false;
+
+            }
+
+            $clientHandle->resource = $resource === '/' ? '/' : substr($resource['path'], 1);
+
+            if (isset($resource['query']) === true) {
+
+                parse_str($resource['query'], $clientHandle->resourceQuery);
+
+            } else {
+
+                $clientHandle->resourceQuery = array();
+
+            }
 
             if ($clientHandle->resource !== '/' && isset($this->maxResourceClients[$clientHandle->resource]) === false) {
 
@@ -449,7 +661,7 @@ class WebSocket {
                 $handshake = "HTTP/1.1 101 Switching Protocols\r\n";
                 $handshake .= "Upgrade: websocket\r\n";
                 $handshake .= "Connection: Upgrade\r\n";
-                $handshake .= "Sec-WebSocket-Accept: " . base64_encode(sha1($header['sec-websocket-key'] . WebSocket::GUID, true)) . "\r\n";
+                $handshake .= "Sec-WebSocket-Accept: " . base64_encode(sha1($header['sec-websocket-key'] . self::GUID, true)) . "\r\n";
                 $handshake .= "\r\n";
                 $clientHandle->write($handshake);
 
@@ -592,29 +804,34 @@ class WebSocket {
         switch ((int) $errorid) {
             case 400:
 
+                $this->log('I think client attack this server ?', self::LOG_WARNING);
+
                 $status .= '400 Bad Request';
 
                 if (($clientHandle instanceof WebSocketClient) === false) {
 
-                    $this->triggerEvent('server-failure-connection', $clientHandle);
+                    $this->triggerEvent('serverFailureConnection', $clientHandle);
 
                 } else {
 
-                    $this->triggerEvent('failure-connection', $clientHandle);
+                    $this->triggerEvent('failureConnection', $clientHandle);
 
                 }
+
             break;
             case 503:
+
+                $this->log('Overflow capacity ! I suggest change in capacity', self::LOG_WARNING);
 
                 $status .= '503 Service Unavailable';
 
                 if (($clientHandle instanceof WebSocketClient) === false) {
 
-                    $this->triggerEvent('server-overflow-connection', $clientHandle);
+                    $this->triggerEvent('serverOverflowConnection', $clientHandle);
 
                 } else {
 
-                    $this->triggerEvent('overflow-connection', $clientHandle);
+                    $this->triggerEvent('overflowConnection', $clientHandle);
 
                 }
 
@@ -804,6 +1021,10 @@ class WebSocket {
 
     }
 
+    public function isSecure () {
+        return $this->secure;
+    }
+
     public function setMaxResourceClients ($resource, $size) {
 
         $resource = (string) $resource;
@@ -824,6 +1045,17 @@ class WebSocket {
             $this->maxResourceClients[$resource] = (int) $size;
 
         }
+
+    }
+
+    public function setListenInterval($interval) {
+
+        $this->listenInterval = ((int) $interval) * 1000;
+    }
+
+    public function setDisplayLog ($bool) {
+
+        $this->displayLog = (bool) $bool;
 
     }
 
@@ -856,6 +1088,63 @@ class WebSocket {
         }
 
         $this->maxResourceClients[$resource]['connections'] += (int) $size;
+
+        $this->log('A new connections %d on uri resource "%s"', self::LOG_INFO, $this->maxResourceClients[$resource]['connections'], $resource);
+
+    }
+
+    private function log ($message, $type = self::LOG_INFO) {
+
+        if ($this->displayLog === true) {
+
+            $head = '';
+
+            switch ($type) {
+                case self::LOG_INFO:
+
+                    $head = '[Info %s]';
+
+                break;
+                case self::LOG_WARNING:
+
+                    $head = '[Warning %s]';
+
+                break;
+                case self::LOG_ERROR:
+
+                    $head = '[Error %s]';
+
+                break;
+                case self::LOG_NOTICE:
+
+                    $head = '[Notice %s]';
+
+                break;
+                case self::LOG_EXCEPTION:
+
+                    $head = '[Exception %s] Caught Exception:';
+
+                break;
+                case self::LOG_WAIT:
+
+                    $head = '[Wait %s]';
+
+                break;
+                case self::LOG_SUCCESS:
+
+                    $head = '[Success %s]';
+
+                break;
+
+            }
+
+            if ($type === self::LOG_EXCEPTION && $this->displayException === false) {
+                continue;
+            }
+
+            vprintf(sprintf($head, date('Y-m-d H:i:s')) . ' ' . $message . "\n", array_slice(func_get_args(), 2));
+
+        }
 
     }
 
