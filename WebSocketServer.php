@@ -37,6 +37,8 @@ class WebSocketServer {
 
     private $secure = false;
 
+    private $sslDirectoryPath = 'ssl';
+
     private $address = '0.0.0.0';
 
     private $initEvents = array(
@@ -407,7 +409,7 @@ class WebSocketServer {
             $this->log('Creation SSL Key', self::LOG_WAIT, $this->address, $this->port);
 
             $configurePath = array(
-                'config' => 'ssl/openssl.cnf',
+                'config' => $this->sslDirectoryPath . '/openssl.cnf',
                 'private_key_bits' => 2048,
                 'digest_alg' => 'sha512',
                 'x509_extensions' => 'v3_ca',
@@ -444,9 +446,9 @@ class WebSocketServer {
 
             openssl_pkey_export($sslHandle, $pkey, $passphrase, $configurePath);
 
-            file_put_contents('ssl/wss.pem', $x509 . $pkey);
+            file_put_contents($this->sslDirectoryPath . '/wss.pem', $x509 . $pkey);
 
-            stream_context_set_option($context, 'ssl', 'local_cert', 'ssl/wss.pem');
+            stream_context_set_option($context, 'ssl', 'local_cert', $this->sslDirectoryPath . '/wss.pem');
             stream_context_set_option($context, 'ssl', 'passphrase', $passphrase);
             stream_context_set_option($context, 'ssl', 'allow_self_signed', true);
             stream_context_set_option($context, 'ssl', 'verify_peer', false);
@@ -1023,6 +1025,14 @@ class WebSocketServer {
 
     public function isSecure () {
         return $this->secure;
+    }
+
+    public function setSSLPath ($path) {
+        $this->sslDirectoryPath = (string) $path;
+    }
+
+    public function getSSLPath () {
+        return $this->sslDirectoryPath;
     }
 
     public function setMaxResourceClients ($resource, $size) {
