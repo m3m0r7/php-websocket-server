@@ -3,7 +3,7 @@ Copyright (C) 2012  メモリー
 
 チェンジログ:
 
-2012/3/x
+2012/3/16
 
     Added
         * Version 2.0.1 リリース
@@ -775,7 +775,7 @@ Copyright (C) 2012  メモリー
             include 'IWebSocketEvent.php';
             include 'WebSocketException.php';
 
-            $ws = new WebSocket('0.0.0.0', 8484);
+            $ws = new WebSocketServer('0.0.0.0', 8484);
 
             $ws->registerEvent('connect', function ($handle) {
                 printf("%s:%dが接続しました。\n", $handle->address, $handle->port);
