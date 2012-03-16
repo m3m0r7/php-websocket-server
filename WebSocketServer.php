@@ -27,7 +27,7 @@ class WebSocketServer {
 
     private $listenInterval = 2000000;
 
-    private $displayLog = true;
+    private $displayLog = false;
 
     private $displayExceptions = false;
 
