@@ -3,6 +3,21 @@ Copyright (C) 2012  メモリー
 
 チェンジログ:
 
+2012/3/18
+
+    Added
+        * wssプロトコルに対応しました。
+        * WebSocketServer::isSecure ()を追加
+        * WebSocketServer::setSSLDirectoryPath ($path)を追加
+        * WebSocketServer::getSSLDirectoryPath ()を追加
+
+    Notice
+        * wssプロトコルの問題については後述します。
+
+    Fixed
+        * 例外が発生するとNotice Error: Undefined Index displayExceptionがコンソールに出力される問題を修正
+        (Exceptionsのsの付け忘れです…)
+
 2012/3/16
 
     Added
@@ -138,11 +153,12 @@ Copyright (C) 2012  メモリー
 
     ○ WebSocketServer クラス
 
-        WebSocketServer::__construct ($ip, $port)
+        WebSocketServer::__construct ($ip, $port, $ssl = false)
 
             [引数]
                 $ip - 接続を待機するホスト名
                 $port - 接続を待機するポート番号
+                $ssl - SSL通信を有効にするかどうか。(true/false)
 
         Ver 1.x.x
 
@@ -266,7 +282,7 @@ Copyright (C) 2012  メモリー
 
                 接続している人数を返します。
 
-        Ver 2.x.x
+        Ver 2.0.x
 
             - setMaxServerClients ($size)
 
@@ -342,6 +358,20 @@ Copyright (C) 2012  メモリー
 
                     $bool - true/false
 
+
+        Ver 2.1.x
+
+            - isSecure ()
+
+                SSL通信を有効にしているかをtrue/falseで返します。
+
+            - setSSLDirectoryPath ($path)
+
+                openssl.cnfを設置し、x509.crt, wss-cert.pemを設置するためのディレクトリ先を指定します。
+
+            - getSSLDirectoryPath ()
+
+                openssl.cnf, x509.crt, wss-cert.pemを設置してあるディレクトリを取得します。
 
 
     ○ WebSocketClient クラス
@@ -788,6 +818,35 @@ Copyright (C) 2012  メモリー
             $ws->serverRun(function () {
                 printf("Running Server!\n");
             });
+
+■ wssプロトコルについて
+
+    GoogleChrome以外のブラウザでwssプロトコルを使う場合、
+    自己署名証明書を使う場合において証明書を許可する必要があります。
+    server.bat(sh)を起動後、WebSocketServer::getSSLDirectoryPath() (デフォルトはssl)ディレクトリ内のx509.crtを
+    証明書としてインポートし、信頼する設定にする必要があります。
+
+    なお、第三者認証局を使う場合は生成したCRTとプライベートキーを組み合わせて、
+    WebSocketServer::getSSLDirectoryPath() (デフォルトはssl)ディレクトリにwss-cert.pemとして設置する必要があります。
+
+    x509.crtを生成するにはサーバー起動時にSSLを有効にする必要があります。
+
+    server.phpを開き
+
+        $serv = new WebSocketServer('0.0.0.0', 8484);
+
+    上記のコードを
+
+        $serv = new WebSocketServer('0.0.0.0', 8484, true);
+
+    としてください。これで、SSL通信が可能になり、第三者認証局を使用していない場合は、WebSocketServer::getSSLDirectoryPath() (デフォルトはssl)ディレクトリにx509.crtが生成されます。
+
+    pemファイルの有効期間が過ぎていなければ、2度目のサーバー起動時にx509.crt及びwss-cert.pemの自動生成は行われません。
+    裏を返せば、有効期限が過ぎている場合は、自動生成が行われますので、第三者認証局を使用している場合は、ファイルが書き換わる可能性があります。
+
+    自動生成の場合の有効期間は3652日となっています。
+
+
 
 ■ その他の記述について
 
