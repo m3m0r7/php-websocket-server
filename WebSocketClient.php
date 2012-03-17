@@ -8,6 +8,7 @@ class WebSocketClient {
     public $port = -1;
 
     public $timestamp = -1;
+    public $lastAccess = -1;
 
     public $id = -1;
 
@@ -99,6 +100,8 @@ class WebSocketClient {
     }
 
     public function getMessage () {
+
+        $this->lastAccess = time();
 
         if ($this->rfc === true) {
 

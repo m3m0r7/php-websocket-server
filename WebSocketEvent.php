@@ -10,7 +10,7 @@ class WebSocketEvent {
     }
 
     public function setClient (&$client) {
-        $this->client = $client;
+        $this->client = &$client;
     }
 
     public function overflowConnection () {}

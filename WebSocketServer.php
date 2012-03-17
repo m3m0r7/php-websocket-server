@@ -2,7 +2,7 @@
 
 class WebSocketServer {
 
-    const VERSION = '2.0.1';
+    const VERSION = '2.1.0';
     const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
     const LOG_INFO = 0;
@@ -36,6 +36,8 @@ class WebSocketServer {
     private $port = 0;
 
     private $secure = false;
+
+    private $passphrase = 'websocket-ssl-connection';
 
     private $sslDirectoryPath = 'ssl';
 
@@ -406,58 +408,30 @@ class WebSocketServer {
 
         if ($this->secure === true) {
 
-            $this->log('Creation SSL Key', self::LOG_WAIT, $this->address, $this->port);
+            if (is_file($this->sslDirectoryPath . '/wss-cert.pem') === true) {
 
-            $configurePath = array(
-                'config' => $this->sslDirectoryPath . '/openssl.cnf',
-                'private_key_bits' => 2048,
-                'digest_alg' => 'sha512',
-                'x509_extensions' => 'v3_ca',
-                'req_extensions'   => 'v3_req',
-                'private_key_type' => OPENSSL_KEYTYPE_RSA,
-                'encrypt_key' => true
-            );
+                $check = openssl_x509_parse(file_get_contents($this->sslDirectoryPath . '/wss-cert.pem'));
 
-            if (function_exists('openssl_pkey_new') === false) {
+                if ($check['validTo_time_t'] < time()) {
 
-                $this->log('Creation SSL Key Error. May you not openssl compiled with php.', self::LOG_ERROR);
+                    $this->createPEM();
 
-                exit();
+                }
+
+            } else {
+
+                $this->createPEM();
 
             }
 
-            $sslHandle = openssl_pkey_new($configurePath);
-
-            $passphrase = md5(uniqid(time()));
-
-            $csrNew = openssl_csr_new (array(
-                'countryName' => 'JP',
-                'stateOrProvinceName' => 'none',
-                'localityName' => 'none',
-                'organizationName' => 'none',
-                'organizationalUnitName' => 'none',
-                'commonName' => 'localhost',
-                'emailAddress' => 'postmaster@localhost'
-            ), $sslHandle, $configurePath);
-
-            $cert = openssl_csr_sign($csrNew, null, $sslHandle, 365, $configurePath);
-
-            openssl_x509_export($cert, $x509);
-
-            openssl_pkey_export($sslHandle, $pkey, $passphrase, $configurePath);
-
-            file_put_contents($this->sslDirectoryPath . '/wss.pem', $x509 . $pkey);
-
-            stream_context_set_option($context, 'ssl', 'local_cert', $this->sslDirectoryPath . '/wss.pem');
-            stream_context_set_option($context, 'ssl', 'passphrase', $passphrase);
+            stream_context_set_option($context, 'ssl', 'local_cert', $this->sslDirectoryPath . '/wss-cert.pem');
+            stream_context_set_option($context, 'ssl', 'passphrase', $this->passphrase);
             stream_context_set_option($context, 'ssl', 'allow_self_signed', true);
             stream_context_set_option($context, 'ssl', 'verify_peer', false);
 
-            $this->log('Okay', self::LOG_SUCCESS);
-
         }
 
-        $this->handle = @stream_socket_server(($this->secure === true ? (in_array('sslv3', stream_get_transports()) === true ? 'sslv3' : 'ssl') : 'tcp') . '://' . $this->address . ':' . $this->port, $errno, $err, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
+        $this->handle = @stream_socket_server(($this->secure === true ? 'tls' : 'tcp') . '://' . $this->address . ':' . $this->port, $errno, $err, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $context);
 
         if ($this->handle === false) {
 
@@ -559,6 +533,51 @@ class WebSocketServer {
             }
 
         }
+
+    }
+
+    private function createPEM () {
+
+        $this->log('Creation SSL Key', self::LOG_WAIT, $this->address, $this->port);
+
+        $configurePath = array(
+            'config' => $this->sslDirectoryPath . '/openssl.cnf',
+            'private_key_bits' => 2048,
+            'digest_alg' => 'sha512',
+            'private_key_type' => OPENSSL_KEYTYPE_RSA
+        );
+
+        if (function_exists('openssl_pkey_new') === false) {
+
+            $this->log('Creation SSL Key Error. May you not openssl compiled with php.', self::LOG_ERROR);
+
+            exit();
+
+        }
+
+        $sslHandle = openssl_pkey_new($configurePath);
+
+        $csrNew = openssl_csr_new (array(
+            'countryName' => 'JP',
+            'stateOrProvinceName' => 'Tokyo',
+            'localityName' => 'Nakano',
+            'organizationName' => 'WebSocket',
+            'organizationalUnitName' => 'PHP',
+            'commonName' => 'localhost',
+            'emailAddress' => 'none@localhost'
+        ), $sslHandle, $configurePath);
+
+        $cert = openssl_csr_sign($csrNew, null, $sslHandle, 3652, $configurePath, time());
+
+        openssl_x509_export($cert, $x509);
+
+        openssl_pkey_export($sslHandle, $pkey, $this->passphrase, $configurePath);
+
+        file_put_contents($this->sslDirectoryPath . '/x509.crt', $x509);
+
+        file_put_contents($this->sslDirectoryPath . '/wss-cert.pem', $x509 . $pkey);
+
+        $this->log('Okay', self::LOG_SUCCESS);
 
     }
 
@@ -806,8 +825,6 @@ class WebSocketServer {
         switch ((int) $errorid) {
             case 400:
 
-                $this->log('I think client attack this server ?', self::LOG_WARNING);
-
                 $status .= '400 Bad Request';
 
                 if (($clientHandle instanceof WebSocketClient) === false) {
@@ -1023,18 +1040,6 @@ class WebSocketServer {
 
     }
 
-    public function isSecure () {
-        return $this->secure;
-    }
-
-    public function setSSLPath ($path) {
-        $this->sslDirectoryPath = (string) $path;
-    }
-
-    public function getSSLPath () {
-        return $this->sslDirectoryPath;
-    }
-
     public function setMaxResourceClients ($resource, $size) {
 
         $resource = (string) $resource;
@@ -1079,6 +1084,18 @@ class WebSocketServer {
 
         $this->checkOrigin = ($list === false ? false : (array) $list);
 
+    }
+
+    public function isSecure () {
+        return $this->secure;
+    }
+
+    public function setSSLDirectoryPath ($path) {
+        $this->sslDirectoryPath = (string) $path;
+    }
+
+    public function getSSLDirectoryPath () {
+        return $this->sslDirectoryPath;
     }
 
     public function amountResourceConnections ($resource, $size) {
@@ -1148,8 +1165,8 @@ class WebSocketServer {
 
             }
 
-            if ($type === self::LOG_EXCEPTION && $this->displayException === false) {
-                continue;
+            if ($type === self::LOG_EXCEPTION && $this->displayExceptions === false) {
+                return;
             }
 
             vprintf(sprintf($head, date('Y-m-d H:i:s')) . ' ' . $message . "\n", array_slice(func_get_args(), 2));
