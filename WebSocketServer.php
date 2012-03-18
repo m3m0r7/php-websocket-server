@@ -118,11 +118,15 @@ class WebSocketServer {
 
             if (($clientHandle instanceof WebSocketClient) === true && isset($this->events['__resource__'][$clientHandle->resource]) === true && $this->events['__resource__'][$clientHandle->resource][$eventName] !== false) {
 
+                $sliceArg = 1;
+
                 if ($this->events['__resource__'][$clientHandle->resource]['__event_type__'] === 1) {
 
                     $this->events['__resource__'][$clientHandle->resource]['__class_handle__']->setClient($clientHandle);
 
                     $this->log('Call client class event "%s::%s" on uri "%s"', self::LOG_INFO, get_class($this->events['__resource__'][$clientHandle->resource]['__class_handle__']), $eventName, $clientHandle->resource);
+
+                    $sliceArg = 2;
 
                 } else {
 
@@ -130,12 +134,14 @@ class WebSocketServer {
 
                 }
 
-                call_user_func_array($this->events['__resource__'][$clientHandle->resource][$eventName], array_slice(func_get_args(), 1));
+                call_user_func_array($this->events['__resource__'][$clientHandle->resource][$eventName], array_slice(func_get_args(), $sliceArg));
 
             }
 
 
             if (isset($this->events[$eventName]) === true && $this->events[$eventName] !== false) {
+
+                $sliceArg = 1;
 
                 if (($clientHandle instanceof WebSocketClient) === true && $clientHandle->hasSocket() === true) {
 
@@ -145,13 +151,15 @@ class WebSocketServer {
 
                         $this->log('Call client class event "%s::%s" on uri "%s"', self::LOG_INFO, get_class($this->events['__class_handle__']), $eventName, $clientHandle->resource);
 
+                        $sliceArg = 2;
+
                     } else {
 
                         $this->log('Call client event "%s"', self::LOG_INFO, $eventName, $clientHandle->resource);
 
                     }
 
-                    call_user_func_array($this->events[$eventName], array_slice(func_get_args(), 1));
+                    call_user_func_array($this->events[$eventName], array_slice(func_get_args(), $sliceArg));
 
                 } else if (substr($eventName, 0, $_s) === 'server-') {
 

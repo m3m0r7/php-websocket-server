@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+        <script>
+
+            if (typeof WebSocket === 'undefined') {
+                var ws = new MozWebSocket("ws://" + location.host + ":8484/desktop");
+            } else {
+                var ws = new WebSocket("ws://" + location.host + ":8484/desktop");
+            }
+
+            $(function(){
+
+                ws.onmessage = function (event) {
+
+                    $('#desktopImage').attr('src', event.data);
+
+                }
+
+                ws.onopen = function () {
+
+                    $('#desktop').html('<img id="desktopImage" src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==" width="auto" height="auto" />');
+                    setInterval(function(){
+                        ws.send('screen');
+                    }, 200);
+                }
+
+
+            });
+        </script>
+    </head>
+    <body>
+        <h1>WebSocket デスクトップキャプチャテスト</h1>
+        <div id="desktop">取得中...</div>
+    </body>
+</html>

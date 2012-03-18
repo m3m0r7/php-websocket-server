@@ -2,30 +2,30 @@
 
 interface IWebSocketEvent {
 
-     public function overflowConnection ();
-     public function failureConnection ();
+    public function overflowConnection ();
+    public function failureConnection ();
 
-     public function connect ();
-     public function disconnect ();
+    public function connect ();
+    public function disconnect ();
 
-     public function send ();
+    public function send ($message);
 
-     public function sendPing ();
-     public function sendPong ();
-     public function sendClose ();
+    public function sendPing ($received);
+    public function sendPong ($pong);
+    public function sendClose ();
 
-     public function sendMessage ();
-     public function sendMessagePlain ();
-     public function sendMessageBinary ();
+    public function sendMessage ($message);
+    public function sendMessagePlain ($message);
+    public function sendMessageBinary ($message);
 
-     public function received ();
+    public function received ($message);
 
-     public function receivedPing ();
-     public function receivedPong ();
-     public function receivedClose ();
+    public function receivedPing ($message);
+    public function receivedPong ($message);
+    public function receivedClose ();
 
-     public function receivedMessage ();
-     public function receivedMessagePlain ();
-     public function receivedMessageBinary ();
+    public function receivedMessage ($message, $isBinary);
+    public function receivedMessagePlain ($message);
+    public function receivedMessageBinary ($message);
 
 }

@@ -11,11 +11,13 @@ Copyright (C) 2012  メモリー
         * WebSocketServer::setSSLDirectoryPath ($path)を追加
         * WebSocketServer::getSSLDirectoryPath ()を追加
         * WebSocketClient::$lastAccessを追加
+        * デスクトップ配信サンプルを追加
 
     Notice
         * wssプロトコルの問題については後述します。
 
     Fixed
+        * クラスインスタンスをイベントとして設定した場合、$message引数などが渡されない問題を修正しました。
         * 例外が発生するとNotice Error: Undefined Index displayExceptionがコンソールに出力される問題を修正
         (Exceptionsのsの付け忘れです…)
 

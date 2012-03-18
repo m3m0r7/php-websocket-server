@@ -18,11 +18,12 @@ try {
 
     $serv->registerResource ('chat');
     $serv->registerResource ('time');
+    $serv->registerResource ('desktop');
 
-    $serv->setCheckOrigin(array(
-        'localhost',
-        '127.0.0.1'
-    ));
+//    $serv->setCheckOrigin(array(
+//        'localhost',
+//        '127.0.0.1'
+//    ));
 
     // 全イベント
 
@@ -88,6 +89,30 @@ try {
     }
 
     $serv->registerEvent(new TimeEvent(), 'time');
+
+    // デスクトップキャプチャ (Windows上のみで動作)
+    class DesktopEvent extends WebSocketEvent implements IWebSocketEvent {
+
+        public function receivedMessagePlain ($message) {
+
+            if ($message !== 'screen') {
+                return;
+            }
+
+            $im = imagegrabscreen();
+
+            ob_start();
+            imagejpeg($im, null, 60);
+            $window = ob_get_clean();
+            imagedestroy($im);
+
+            $this->client->sendMessage('data:image/jpeg;base64,' . base64_encode($window));
+
+        }
+
+    }
+
+    $serv->registerEvent(new DesktopEvent(), 'desktop');
 
     $serv->serverRun();
 

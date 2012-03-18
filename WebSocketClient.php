@@ -274,7 +274,7 @@ class WebSocketClient {
 
                         // セッションクローズ
 
-                        self::$server->triggerEvent ('receivedClose', $this, $string, true);
+                        self::$server->triggerEvent ('receivedClose', $this, $string);
 
                         $this->close();
 
