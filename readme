@@ -764,7 +764,7 @@ Copyright (C) 2012  メモリー
 
         のようにして宣言する必要があります。(extends WebSocketEventは省略できません。)
 
-        WebSocketEvent::$handleにはクライアントハンドルが格納され、WebSocketEvent::$serverにはサーバーハンドルがそれぞれ参照渡しで格納されます。
+        WebSocketEvent::$clientにはクライアントハンドルが格納され、WebSocketEvent::$serverにはサーバーハンドルがそれぞれ参照渡しで格納されます。
 
         また、宣言するメソッドはWebSocketEventをご覧頂ければわかりますが、文字列で定義していたイベント名をメソッド名として宣言します。
 
@@ -778,10 +778,10 @@ Copyright (C) 2012  メモリー
 
                     $this->handle->sendMessage((string) time());
 
-                    printf("> Sent a time to %s:%d\n", $this->handle->address, $this->handle->port);
+                    printf("> Sent a time to %s:%d\n", $this->client->address, $this->client->port);
 
                     // 終了させる。
-                    $this->handle->sendClose();
+                    $this->client->sendClose();
 
                 }
 
