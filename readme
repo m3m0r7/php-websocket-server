@@ -10,6 +10,7 @@ Copyright (C) 2012  メモリー
         * WebSocketServer::isSecure ()を追加
         * WebSocketServer::setSSLDirectoryPath ($path)を追加
         * WebSocketServer::getSSLDirectoryPath ()を追加
+        * WebSocketClient::$lastAccessを追加
 
     Notice
         * wssプロトコルの問題については後述します。
@@ -482,6 +483,11 @@ Copyright (C) 2012  メモリー
                     )
 
                     のように格納されます。
+
+           - $lastAccess
+
+                最終アクセス日時を記録します。すなわち、最後にクライアントが
+                サーバーのストリームに書き込んだ日時です。
 
 ■ broadcast系のメソッドについて
 
