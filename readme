@@ -3,6 +3,12 @@ Copyright (C) 2012  メモリー
 
 チェンジログ:
 
+2012/3/22
+
+    Fixed
+        * WebSocketEventクラスがNamespaceでextendsされている場合、
+          WebSocketServer::registerEvent()が失敗するバグを修正しました。
+
 2012/3/18
 
     Added

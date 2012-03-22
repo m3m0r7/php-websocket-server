@@ -212,6 +212,9 @@ class WebSocketServer {
 
         if (($parentClass = get_parent_class($eventName)) !== false) {
 
+            $namespace = strrpos($parentClass, '\\');
+            $parentClass = substr($parentClass, ($namespace !== false ? ($namespace + 1) : 0));
+
             if ($parentClass === 'WebSocketEvent') {
 
                 $resource = $callbackORresource;
