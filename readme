@@ -3,6 +3,12 @@ Copyright (C) 2012  メモリー
 
 チェンジログ:
 
+2012/8/31
+
+    Fixed
+        * Version 2.1.1 リリース
+        * Google Chromeで正常に送受信ができない問題を修正
+
 2012/3/22
 
     Fixed
@@ -141,6 +147,7 @@ Copyright (C) 2012  メモリー
 
 ■ 確認済みの環境
 
+    PHP 5.4.5 (CentOS 6.3)
     PHP 5.3.8 (Windows 7, XAMPP)
 
 ■ サンプルの利用方法

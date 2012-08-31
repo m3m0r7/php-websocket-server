@@ -2,7 +2,7 @@
 
 class WebSocketServer {
 
-    const VERSION = '2.1.0';
+    const VERSION = '2.1.1';
     const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
     const LOG_INFO = 0;

@@ -433,7 +433,7 @@ class WebSocketClient {
 
         }
 
-        $this->sendCommand ($message, 0x01, true);
+        $this->sendCommand ($message, 0x01);
 
         self::$server->triggerEvent ('sendMessagePlain', $this, $message);
 
