@@ -169,7 +169,7 @@ class WebSocketClient {
 
                         $size = current(unpack('n', $message[$ptr] . $message[$ptr + 1]));
 
-                        $ptr++;
+                        $ptr += 2;
 
                     break;
 
